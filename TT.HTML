@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Embedded SupercWeather Map</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .embed-container {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            overflow: hidden;
+        }
+        .embed-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>SupercWeather Map Embed</h1>
+    <div class="embed-container">
+        <iframe style="margin-left:-170px;overflow:hidden;"
+            src="https://supercweather.com/?lat=22.459264&lng=114.093595&model=h08&element=ri&zl=8" 
+            allowfullscreen 
+            loading="lazy">
+        </iframe>
+    </div>
+    <p>This is an embedded view of the SupercWeather map. Adjust the dimensions as needed.</p>
+
+<div class="container">
+        <div class="header">
+            <h1>JMA High-resolution Cloud Analysis Information</h1>
+            <p>Interactive map viewer (Zoom: 6, Lat: 20.53, Lon: 114.70)</p>
+        </div>
+        <iframe src="https://seep.eu.org/https://www.data.jma.go.jp/omaad/rsmc_nowcast/en/hcai/#zoom:6/lat:20.529933/lon:114.697266/colordepth:normal/elements:tbb&htc"></iframe>
+    </div>
+
+</body>
+</html>
