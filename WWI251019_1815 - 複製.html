@@ -1,0 +1,2038 @@
+<!DOCTYPE html><html lang="zh-HK"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Weather Webcam">
+
+  <title>Weather Webcam</title>
+  
+  <!-- PWA Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HK Weather Webcams">
+
+  
+  <!-- Dependencies for Status Bar -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.cdnfonts.com/css/zen-old-mincho" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Aboreto&amp;display=swap" rel="stylesheet">
+
+  <!-- SunCalc library for sunrise/sunset calculation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+
+  <!-- BSR Banner -->
+  <link href="https://bushiroad-music.com/css/styles.css" rel="stylesheet" type="text/css">
+  <script src="https://bushiroad-music.com/js/lib/jquery.min.js"></script>
+  <script src="https://bushiroad-music.com/js/wideslider.js"></script>
+
+<!-- Basic CSS for Webcam Layout -->
+<style>
+/* Fonts */
+@font-face {
+  font-family: 'Johnston100-Medium';
+  src: url("https://seep.eu.org/https://tfl.gov.uk/cdn/static/assets/fonts/Johnston100-Medium.woff2") format("woff2"), url("https://seep.eu.org/https://tfl.gov.uk/cdn/static/assets/fonts/Johnston100-Medium.woff") format("woff"); }
+@font-face {
+  font-family: 'Johnston100-Regular';
+  src: url("https://seep.eu.org/https://tfl.gov.uk/cdn/static/assets/fonts/Johnston100-Regular.woff2") format("woff2"), url("https://seep.eu.org/https://tfl.gov.uk/cdn/static/assets/fonts/Johnston100-Regular.woff") format("woff"); }
+
+    /* General Styles - Reverted to original font */
+    body { 
+        font-family: 'Aboreto', 'Zen Old Mincho', serif;
+        margin: 0; 
+        background-color: #f4f4f4; 
+
+    }
+
+    /* Apply special font ONLY to the new header */
+    header {
+        position: sticky;
+        top: 0;
+        font-family: 'Johnston100-Regular', 'Alata', 'Noto Sans TC', sans-serif; 
+    }
+    h1 { text-align: center; }
+    h2 { font-size: 1.3em;   }
+
+    section { 
+      background-color: #ffffff;
+      border: 1px solid #dddddd;
+      border-radius: 4px;
+      padding: 15px;
+      margin: 0 auto 40px auto;
+      max-width: 1000px; 
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    img { 
+      max-width: 100%; height: auto; border-radius: 0px; 
+    }
+    
+    /* Controls Styling */
+    .controls { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .controls button, .controls input { 
+        padding: 8px 12px; 
+        font-size: 14px;
+        border: 1px solid #cccccc;
+        border-radius: 4px;
+        background-color: #e9e9e9;
+        cursor: pointer;
+        font-family: "Zen Old Mincho", serif; /* Ensure consistent font */
+    }
+    .controls button:hover:not(:disabled), .controls input:hover {
+        background-color: #dcdcdc;
+    }
+    .controls button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+        opacity: 0.6;
+    }
+
+    /* Info and Status Messages */
+    .info-box {
+        background-color: #e6f7ff;
+        border: 1px solid #91d5ff;
+        border-radius: 4px;
+        padding: 15px;
+        margin: 0 auto 40px auto;
+        max-width: 900px;
+        text-align: center;
+    }
+    .loading-indicator {
+        display: none;
+        margin: 5px 0;
+        color: #007BFF;
+        font-weight: 500;
+    }
+    .loading-indicator.show {
+        display: block;
+    }
+    .error-message {
+        color: #dc3545;
+        margin: 5px 0;
+        padding: 8px;
+        background: #f8d7da;
+        border-radius: 4px;
+        display: none;
+    }
+    .error-message.show {
+        display: block;
+    }
+    
+    @media (max-width: 768px) {
+    .status-bar-weather > div:not(:last-child) { display: none; }
+    .status-bar-weather { gap: 0.75rem; }
+    }
+    @media (max-width: 600px) {
+    .controls { flex-direction: column; align-items: stretch; }
+    }
+
+    /* Status Bar Info Cycling */
+    #runwayInfo { 
+        transition: opacity 0.5s; 
+        display: flex; 
+        align-items: center; 
+        gap: 4px; 
+    }
+    .runway-icon { width: 16px; height: 14px; }
+    #status-wind, #status-temp, #status-humidity, #status-visibility {
+    transition: opacity 0.5s ease;
+    }
+
+    /* New container for slider-style image viewers */
+    .image-viewer-container {
+        position: relative;
+    }
+
+     .wrapper {
+      min-height: 100%;
+
+        /* Basic styling for the slider container */
+        .slider-container {
+            position: relative;
+            max-width: 1000px;
+            max-height: 720px;
+            margin: auto;
+            overflow: hidden;
+        }
+
+        /* Styling for the individual slides */
+        .slide {
+            display: none;
+            width: 100%;
+        }
+
+        /* The smooth fade transition */
+        .slide img {
+            width: 100%;
+            vertical-align: middle; /* Fixes bottom space under image */
+    transition: opacity 0.5s ease;
+        }
+
+        /* MODIFIED: Corrected animation properties for fade effect */
+        .fade {
+            animation-name: fade;
+            animation-duration: 1.5s;
+        }
+
+        @keyframes fade {
+            from {opacity: 0}
+            to {opacity: 1}
+        }
+
+        /* Styling for the navigation buttons */
+    .prev, .next {
+        cursor: pointer;
+        position: absolute;
+        top: 50%;
+        width: auto;
+        padding: 16px;
+        margin-top: -22px;
+        color: white;
+        font-weight: bold;
+        font-size: 20px;
+        transition: 0.8s ease;
+        user-select: none;
+        background-color: transparent;
+    }
+
+    .next {
+        right: 0;
+    }
+
+        /* On hover, add a black background color with a little bit see-through */
+        .prev:hover, .next:hover {
+            background-color: rgba(0,0,0,0.8);
+        }
+
+        /* Styling for the dots/indicators container */
+        .dots-container {
+            position: absolute; /* Position dots over the image */
+            bottom: 5px;
+            width: 100%;
+            text-align: center;
+            /* Make the container bar transparent */
+            background-color: transparent;
+            padding: 0; /* Remove previous padding */
+        }
+
+        .dot {
+            cursor: pointer;
+            height: 8px;
+            width: 8px;
+            margin: 0 5px; /* Increased margin for better spacing */
+            background-color: rgba(255, 255, 255, 0.5); /* Semi-transparent white */
+            border-radius: 50%;
+            display: inline-block;
+            transition: background-color 0.6s ease;
+            border: 1px solid rgba(0, 0, 0, 0.2); /* Optional: adds a subtle border */
+        }
+
+        .active, .dot:hover {
+            background-color: #ffffff; /* Solid white for active/hover */
+        }
+
+/* SZX Video Player Styles */
+    #videoContainer {
+        width: 100%;
+        max-width: 1000px; /* Keep this to constrain the video player a bit inside the section */
+        text-align: center;
+        margin: 0 auto; /* Center the container itself */
+    }
+
+    video {
+        width: 100%;
+        height: auto;
+        background-color: #000;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Match section shadow */
+        border-radius: 0px; /* Match img */
+        margin-top: 10px; /* Match img */
+        margin-bottom: 15px;
+        object-fit: contain;
+        cursor: pointer;
+    }
+
+    #statusText {
+        margin-top: 15px;
+        font-size: 0.9em;
+        color: #555;
+        word-wrap: break-word;
+        min-height: 3em;
+    }
+    
+    #statusText a {
+        color: #007BFF;
+        text-decoration: none;
+    }
+    
+    #statusText a:hover {
+        text-decoration: underline;
+    }
+
+/* Footer */
+    .footer {
+      font-family: 'Aboreto', 'Zen Old Mincho', serif;
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 50px;
+      margin-top: -50px;
+      background-color: black;
+    }
+
+/* Scroll to Top Button */
+    #scrollToTopBtn {
+        display: none; /* Hidden by default */
+        position: fixed;
+        bottom: 80px; /* Positioned to avoid the footer */
+        right: 10px;
+        z-index: 99;
+        border: none;
+        outline: none;
+        background-color: rgba(0, 150, 150, 0.1);
+        color: white;
+        cursor: pointer;
+        padding: 15px;
+        font-size: 18px;
+        transition: opacity 0.4s, visibility 0.4s;
+        opacity: 0;
+        visibility: hidden;
+    }
+
+    #scrollToTopBtn.show {
+        display: block;
+        visibility: visible;
+        opacity: 1;
+    }
+
+    #scrollToTopBtn:hover {
+        background-color: rgba(0, 150, 150, 0.3);
+    }
+    
+/* --- RESPONSIVE DESIGN ADJUSTMENTS --- */
+
+/* On medium screens (tablets), adjust status bar and banner */
+@media (max-width: 768px) {
+    .status-bar-weather > div:not(:last-child) { display: none; }
+    .status-bar-weather { gap: 0.75rem; }
+    .banner-slider {
+        height: 200px;
+    }
+}
+
+/* On small screens (mobile), stack controls vertically */
+@media (max-width: 600px) {
+    .controls { 
+        flex-direction: column; 
+        align-items: stretch; 
+    }
+}
+
+/* MODIFIED: On large tablets and below, maintain side-by-side layout but make it flexible */
+@media (max-width: 1024px) {
+    #body-container {
+        /* REMOVED flex-direction: column to keep side-by-side layout */
+        align-items: flex-start; /* Align columns to the top */
+        padding: 0 15px; /* Add horizontal padding */
+        gap: 15px; /* Reduce gap between columns */
+    }
+
+  </style>
+</head>
+
+
+<body>
+
+  <!-- Smartphone-like Status Bar -->
+    <header class="bg-white shadow-md sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Left side data -->
+                <div id="status-bar-left" class="flex items-center space-x-3 text-sm md:text-base">
+                    <span class="font-bold text-gray-900" id="status-time">--:--</span>
+                    <!-- MODIFIED: Initially hidden, will be shown by script -->
+                    <span id="status-wind" class="font-bold text-gray-900" style="display: none;">-- km/h --</span>
+                    <a href="https://www.hko.gov.hk/tc/wxinfo/ts/display_graph.htm?hka&amp;menu=otherwxi&amp;rwx&amp;addbar" target="_blank" style="text-decoration: none; color: inherit;" title="赤鱲角過去二十四小時天氣">
+                    <!-- MODIFIED: Elements for alternating display (already hidden by default) -->
+                    <span id="status-temp" style="display: none;">--°C</span>
+                    <span id="status-humidity" style="display: none;">--%</span>
+                    <span id="status-visibility" style="display: none;">--km</span>
+                    </a>
+                    <!-- MODIFIED: Replaced img with a div container for dynamic icons, initially hidden -->
+                    <div id="hko-icons-container" class="flex items-center space-x-0" style="display: none;">
+                        <div class="w-6 h-6 bg-gray-200 rounded-lg animate-pulse"></div>
+                    </div>
+                    <div id="special-messages" class="flex-1"></div>
+                </div>
+                <!-- Right side data (Sunset) -->
+                <div class="flex items-center space-x-2 text-sm md:text-base">
+                   <!-- MODIFIED: Initially hidden, will be shown by script -->
+                   <div id="runwayInfo" style="display: none;"></div>
+              </div>
+          </div>
+      </div>
+    </header>
+
+  <div class="wrapper">
+  <h1 class="mt-4 mb-4 text-3xl font-bold text-center">天氣照片 (Beta)</h1>
+
+<div class="p-block-a-l c-box js-wideslider"><ul class="p-block-a-l__container" loading="lazy">
+	<li class="p-block-a-l__item">
+		<a href="https://bang-dream.com/events/mygo_tour2025" target="_blank">
+			<picture>
+				<source srcset="https://bushiroad-music.com/wordpress/wp-content/uploads/2025/05/19134605/MyGO_ZEPPTOUR2025_banner_01-1024x345.png" media="screen and (max-width:768px)" loading="lazy">
+				<img src="https://bushiroad-music.com/wordpress/wp-content/uploads/2025/05/19134605/MyGO_ZEPPTOUR2025_banner_01.png" alt="MyGO!!!!! ZEPP TOUR 2025「心のはしを辿って」">
+			</picture>
+		</a>
+	</li>
+	<li class="p-block-a-l__item">
+		<a href="https://bushiroad-music.com/musics/brmm-10960/" target="_blank">
+			<picture>
+				<source srcset="https://bushiroad-music.com/wordpress/wp-content/uploads/2025/07/02100012/BGD_MyGO_7thSG_banner_01_1515x510.jpg" media="screen and (max-width:768px)" loading="lazy">
+				<img src="https://bushiroad-music.com/wordpress/wp-content/uploads/2025/07/02100012/BGD_MyGO_7thSG_banner_01_1515x510.jpg" alt="MyGO!!!!! 7th Single「往欄印」">
+			</picture>
+		</a>
+	</li>
+
+
+	<li class="p-block-a-l__item">
+		<a href="https://bang-dream.com/events/mygo-avemujica2025_shanghai#LiveViewing" target="_blank">
+			<picture>
+				<source srcset="https://bushiroad-music.com/wordpress/wp-content/uploads/2025/09/26190349/MyMuji_BANNER_03_06_1515x510-2.png" media="screen and (max-width:768px)" loading="lazy">
+				<img src="https://bushiroad-music.com/wordpress/wp-content/uploads/2025/09/26190349/MyMuji_BANNER_03_06_1515x510-2.png" alt="">
+			</picture>
+		</a>
+	</li>
+
+	<li class="p-block-a-l__item">
+		<a href="https://anime.bang-dream.com/mygo/" target="_blank">
+			<picture>
+				<source srcset="https://s3-ap-northeast-1.amazonaws.com/bang-dream-portal/9a2b7f14-8893-4425-b209-a5bfc92a49b6.png" media="screen and (max-width:768px)" loading="lazy">
+				<img src="https://s3-ap-northeast-1.amazonaws.com/bang-dream-portal/9a2b7f14-8893-4425-b209-a5bfc92a49b6.png" alt="MyGO!!!!!">
+			</picture>
+		</a>
+	</li>
+
+	<li class="p-block-a-l__item">
+		<a href="https://anime.bang-dream.com/avemujica/" target="_blank">
+			<picture>
+				<source srcset="https://en.bang-dream.com/wordpress/wp-content/themes/en_bang-dream_v0/assets/images/common/anime/img_ave-mujica.jpg" media="screen and (max-width:768px)" loading="lazy">
+				<img src="https://en.bang-dream.com/wordpress/wp-content/themes/en_bang-dream_v0/assets/images/common/anime/img_ave-mujica.jpg" alt="Ave Mujica">
+			</picture>
+		</a>
+	</li>
+
+	<li class="p-block-a-l__item">
+		<a href="https://girls-band-cry.com/" target="_blank">
+			<picture>
+				<source srcset="https://tc-animate.techorus-cdn.com/resize_image/resize_image.php?image=10151147_670dd7d40aa12.jpg" media="screen and (max-width:768px)" loading="lazy">
+				<img src="https://tc-animate.techorus-cdn.com/resize_image/resize_image.php?image=10151147_670dd7d40aa12.jpg" alt="ガールズバンドクライ">
+			</picture>
+		</a>
+	</li>
+
+
+
+</ul></div>
+
+  <div class="info-box">
+    <strong>時間選擇限制在最近 48 小時(香港)或 118 小時(澳門)內。</strong> 
+    <p>風速風向顯示順序 : 赤鱲角 &gt; 沙洲(紅) &gt; 青衣(青) &gt; 屯門(藍)</p>
+  </div>
+
+
+  <!-- Hong Kong Webcams -->
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">沙螺灣 (遠眺香港國際機場)</h2>
+    <p>圖像時間: <span id="salo_time">(HKT)</span></p>
+    <div class="image-viewer-container">
+        <img id="salo_img" class="hko-webcam lazy-target" data-id="salo" alt="沙螺灣 Webcam">
+        <a class="prev" onclick="showPrevious('salo')">❮</a>
+        <a class="next" onclick="showNext('salo')">❯</a>
+    </div>
+    <div class="controls">
+      <button onclick="showLatest('salo')">最新圖像</button>
+      <input type="datetime-local" id="salo_datetime" onchange="selectTime('salo')">
+    </div>
+  </section>
+
+  <!-- MODIFIED SECTION for Shek Pik -->
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">石壁全天影像</h2>
+    <p>圖像時間: <span id="shek_pik_time">(HKT)</span></p>
+    <div style="position: relative; max-width: 700px; margin: 0 auto 10px auto; overflow: hidden;">
+        <img id="shek_pik_imj" class="hko-webcam lazy-target" data-id="shek_pik" alt="石壁全天影像" style="width: 100%; display: block;">
+        <a class="prev" onclick="showPrevious('shek_pik')">❮</a>
+        <a class="next" onclick="showNext('shek_pik')">❯</a>
+    </div>
+    <div class="controls">
+      <button onclick="showLatest('shek_pik')">最新圖像</button>
+      <input type="datetime-local" id="shek_pik_datetime" onchange="selectTime('shek_pik')" step="300">
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">屯門-赤鱲角隧道南面入口 [TC001F]</h2>
+    <img data-src="https://tdcctv.data.one.gov.hk/TC001F.JPG" alt="TC001F Webcam" class="lazy-target">
+  </section>
+
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">東榮路 [NL022F]</h2>
+    <img data-src="https://tdcctv.data.one.gov.hk/NL022F.JPG" alt="NL022F Webcam" class="lazy-target">
+  </section>
+
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">順朗路近北大嶼山公路 [NL206F]</h2>
+    <img data-src="https://tdcctv.data.one.gov.hk/NL206F.JPG" alt="NL206F Webcam" class="lazy-target">
+  </section>
+
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">北大嶼山公路近白芒 [NL126F]</h2>
+    <img data-src="https://tdcctv.data.one.gov.hk/NL126F.JPG" alt="NL126F Webcam" class="lazy-target">
+  </section>
+
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">港珠澳大橋香港口岸出境客車通關廣場 [NL184F]</h2>
+    <img data-src="https://tdcctv.data.one.gov.hk/NL184F.JPG" alt="NL184F Webcam" class="lazy-target">
+  </section>
+
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">屯門公路-大欖角段 [TR114F]</h2>
+    <img data-src="https://tdcctv.data.one.gov.hk/TR114F.JPG" alt="TR114F Webcam" class="lazy-target">
+  </section>
+
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">屯門-赤鱲角隧道北面入口 [TC003F]</h2>
+    <img data-src="https://tdcctv.data.one.gov.hk/TC003F.JPG" alt="TC003F Webcam" class="lazy-target">
+  </section>
+
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">龍門路迴旋處近屯門至赤鱲角連接路 [TC002F]</h2>
+    <img data-src="https://tdcctv.data.one.gov.hk/TC002F.JPG" alt="TC002F Webcam" class="lazy-target">
+  </section>
+
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">長洲 (望向北面)</h2>
+    <p>圖像時間: <span id="cheung_chau_time">(HKT)</span></p>
+    <div class="image-viewer-container">
+        <img id="cheung_chau_img" class="hko-webcam lazy-target" data-id="cheung_chau" alt="長洲 Webcam">
+        <a class="prev" onclick="showPrevious('cheung_chau')">❮</a>
+        <a class="next" onclick="showNext('cheung_chau')">❯</a>
+    </div>
+    <div class="controls">
+      <button onclick="showLatest('cheung_chau')">最新圖像</button>
+      <input type="datetime-local" id="cheung_chau_datetime" onchange="selectTime('cheung_chau')">
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">長沙 (望向西北面)</h2>
+    <p>圖像時間: <span id="cheung_sha_time">(HKT)</span></p>
+    <div class="image-viewer-container">
+        <img id="cheung_sha_img" class="hko-webcam lazy-target" data-id="cheung_sha" alt="長沙 Webcam">
+        <a class="prev" onclick="showPrevious('cheung_sha')">❮</a>
+        <a class="next" onclick="showNext('cheung_sha')">❯</a>
+    </div>
+    <div class="controls">
+      <button onclick="showLatest('cheung_sha')">最新圖像</button>
+      <input type="datetime-local" id="cheung_sha_datetime" onchange="selectTime('cheung_sha')">
+    </div>
+  </section>
+
+  <!-- NEW SECTION FOR TAI MO SHAN -->
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">大帽山 (望向西南面)</h2>
+    <p>圖像時間: <span id="tai_mo_shan_time">(HKT)</span></p>
+    <div class="image-viewer-container">
+        <img id="tai_mo_shan_img" class="hko-webcam lazy-target" data-id="tai_mo_shan" alt="大帽山 Webcam">
+        <a class="prev" onclick="showPrevious('tai_mo_shan')">❮</a>
+        <a class="next" onclick="showNext('tai_mo_shan')">❯</a>
+    </div>
+    <div class="controls">
+      <button onclick="showLatest('tai_mo_shan')">最新圖像</button>
+      <input type="datetime-local" id="tai_mo_shan_datetime" onchange="selectTime('tai_mo_shan')">
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-2xl mb-2 font-bold">大欖涌 (遠眺大嶼山北部)</h2>
+    <p>圖像時間: <span id="tai_lam_time">(HKT)</span></p>
+    <div class="image-viewer-container">
+        <img id="tai_lam_img" class="hko-webcam lazy-target" data-id="tai_lam" alt="大欖涌 Webcam" style="width: 100%; display: block;">
+        <a class="prev" onclick="showPrevious('tai_lam')">❮</a>
+        <a class="next" onclick="showNext('tai_lam')">❯</a>
+    </div>
+    <div class="controls">
+      <button onclick="showLatest('tai_lam')">最新圖像</button>
+      <input type="datetime-local" id="tai_lam_datetime" onchange="selectTime('tai_lam')">
+    </div>
+  </section>
+  
+
+  <!-- Macau Webcams -->
+  <section class="lazy-target" data-lazy-type="macau">
+      <h2 class="text-2xl mb-2 font-bold">氹仔雷達塔 (望向南面)</h2>
+      <p>圖像時間: <span id="timestampPip">Initializing...</span></p>
+      <div class="loading-indicator" id="loadingPip"></div>
+      <div class="error-message" id="errorPip"></div>
+      <div class="image-viewer-container">
+        <img id="webcamImagePip" src="" alt="Loading Pipcam Image">
+        <a id="prevPipBtn" class="prev">❮</a>
+        <a id="nextPipBtn" class="next">❯</a>
+      </div>
+      <div class="controls">
+          <button id="latestPip">最新圖像</button>
+          <input type="datetime-local" id="timePickerPip">
+      </div>
+  </section>
+
+  <section class="lazy-target" data-lazy-type="macau">
+      <h2 class="text-2xl mb-2 font-bold">氹仔雷達塔 (望向東北面)</h2>
+      <p>圖像時間: <span id="timestampOip">Initializing...</span></p>
+      <div class="loading-indicator" id="loadingOip"></div>
+      <div class="error-message" id="errorOip"></div>
+      <div class="image-viewer-container">
+        <img id="webcamImageOip" src="" alt="Loading Oipcam Image">
+        <a id="prevOipBtn" class="prev">❮</a>
+        <a id="nextOipBtn" class="next">❯</a>
+      </div>
+      <div class="controls">
+          <button id="latestOip">最新圖像</button>
+          <input type="datetime-local" id="timePickerOip">
+      </div>
+  </section>
+
+
+  <div class="slider-container">
+        <!-- Images for the slider -->
+        <div class="slide fade">
+            <a href="https://anime.bang-dream.com/mygo/" target="_blank">
+            <img src="https://i.imgur.com/N3WHwwz.png" alt="Image 1">
+            </a>
+        </div>
+        <div class="slide fade">
+            <a href="https://bang-dream.com/discographies/4132" target="_blank">
+            <img src="https://pbs.twimg.com/media/G2AA_tnbsAAaZDT?format=jpg" alt="Image 2">
+        </div>
+        <div class="slide fade">
+            <a href="https://anime.bang-dream.com/mygo/" target="_blank">
+            <img src="https://i0.wp.com/news.qoo-app.com/wp-content/uploads/2022/04/mygocover.jpg" alt="Image 1">
+            </a>
+        </div>
+        <div class="slide fade">
+            <a href="https://www.youtube.com/watch?v=ZZvwHByVIP8" target="_blank">
+            <img src="https://i.ytimg.com/vi/ZZvwHByVIP8/maxresdefault.jpg" alt="Image 3 Ave Mujica official guidebook Fatiscriptum">
+        </div>
+        <div class="slide fade">
+            <a href="https://bang-dream.com/discographies/4092" target="_blank">
+            <img src="https://pbs.twimg.com/media/GyeCZv6asAAbdDt?format=jpg&name=large" alt="Image 4 Onrai" class="lazy-target">
+            </a>
+        </div>
+        <div class="slide fade">
+            <a href="https://www.youtube.com/watch?v=o9sOQduCCgw" target="_blank">
+            <img src="https://news-cdn.para-daily.com/wp-content/uploads/2025/03/mygo_mujica_main_11zon.webp" alt="Image 5">
+            </a>
+        </div>
+        <div class="slide fade">
+            <a href="https://x.com/bang_dream_mygo/status/1917051225217904848" target="_blank">
+            <img src="https://pbs.twimg.com/amplify_video_thumb/1917042193002528768/img/e3VoOndmWJKJCvfd.jpg" alt="MyGO!!!!!の活動3周年を記念">
+            </a>
+        </div>
+        <div class="slide fade">
+            <a href="https://bang-dream.com/events/mygo_8th#Performance_overview" target="_blank">
+            <img src="https://pbs.twimg.com/media/G4akICabsAAsb6C?format=png&name=900x900" alt="Image 8 8TH">
+        </div>
+        <div class="slide fade">
+            <img src="https://truth.bahamut.com.tw/s01/202502/forum/47099/a46b2c8a7490100d763c2173c1553209.JPG" alt="Image 9 CRYCHIC">
+        </div>
+
+        <!-- Next and previous buttons -->
+        <a class="prev">❮</a>
+        <a class="next">❯</a>
+
+        <!-- The dots/circles are now inside the slider-container to be positioned over the image -->
+        <div class="dots-container">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+        </div>
+  </div>
+  
+<br> <br>
+<br> <br>
+
+<footer class="bg-white shadow-md sticky top-0 z-10" id="footer">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+        <p>Frank Clyde 2025 ©</p> 
+        <div id="status-bar-left" class="flex items-center space-x-5 col-md-6 text-sm md:text-base">
+        <a href="https://www.instagram.com/frankgrph" target="_blank"><img src="https://cdn-icons-png.freepik.com/512/5949/5949057.png" style="width:20px;height:20px;"></a>
+        <a href="https://www.flickr.com/photos/n85205" target="_blank"><img src="https://cdn-icons-png.freepik.com/512/1236/1236843.png" style="width:20px;height:20px;"></a>
+        </div>
+</div></div></footer>
+
+  <!-- NEW: Scroll to Top Button HTML -->
+  <button id="scrollToTopBtn" title="Go to top">▲</button>
+        
+
+  <!-- MODIFIED: Universal Lazy Loader and HKO Webcam Script -->
+  <script>
+    // This self-executing function scopes all HKO and lazy-loading logic.
+    (function() {
+        // --- CONFIGURATION ---
+        const webcamConfig = {
+          salo: { baseUrl: 'https://www.weather.gov.hk/wxinfo/aws/hko_mica/slw/imgSLW_', format: 'YYMMDD_HHMM.jpg' },
+          cheung_chau: { baseUrl: 'https://www.weather.gov.hk/wxinfo/aws/hko_mica/cch/imgCCH_', format: 'YYMMDD_HHMM.jpg' },
+          cheung_sha: { baseUrl: 'https://www.weather.gov.hk/wxinfo/aws/hko_mica/cs1/imgCS1_', format: 'YYMMDD_HHMM.jpg' },
+          tai_mo_shan: { baseUrl: 'https://www.weather.gov.hk/wxinfo/aws/hko_mica/tm2/imgTM2_', format: 'YYMMDD_HHMM.jpg' },
+          tai_lam: { baseUrl: 'https://www.weather.gov.hk/wxinfo/aws/hko_mica/tlc/imgTLC_', format: 'YYMMDD_HHMM.jpg' }
+        };
+        const placeholderSrc = "";
+
+
+        // --- HELPER FUNCTIONS ---
+        function formatDateForUrl(date, format) {
+          const year = date.getFullYear().toString().slice(-2);
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          const hours = String(date.getHours()).padStart(2, '0');
+          const minutes = String(date.getMinutes()).padStart(2, '0');
+          if (format === 'YYMMDD_HHMM.jpg') return `${year}${month}${day}_${hours}${minutes}.jpg`;
+          if (format === 'HHmMM.jpg') return `${hours}m${minutes}.jpg`;
+          return '';
+        }
+
+        function formatForDateTimeInput(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
+        }
+        
+        function getClosestFiveMinuteInterval(date) {
+          const minutes = date.getMinutes();
+          const closest = Math.floor(minutes / 5) * 5;
+          const newDate = new Date(date);
+          newDate.setMinutes(closest, 0, 0);
+          return newDate;
+        }
+
+        function checkImage(url) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(true);
+                img.onerror = () => resolve(false);
+                img.src = url;
+            });
+        }
+
+        async function findLatestAvailableImage(id) {
+            const config = webcamConfig[id];
+            let currentDate = getClosestFiveMinuteInterval(new Date());
+            const maxAttempts = 144; // 12 hours worth of attempts
+
+            for (let i = 0; i < maxAttempts; i++) {
+                const url = `${config.baseUrl}${formatDateForUrl(currentDate, config.format)}`;
+                if (await checkImage(url)) {
+                    return currentDate;
+                }
+                currentDate = new Date(currentDate.getTime() - 5 * 60 * 1000);
+            }
+            return getClosestFiveMinuteInterval(new Date()); // Fallback
+        }
+
+        // --- CORE IMAGE UPDATE LOGIC ---
+        async function updateImage(id, date) {
+          const config = webcamConfig[id];
+          if (!config) return;
+          
+          const roundedDate = getClosestFiveMinuteInterval(new Date(date));
+          const url = `${config.baseUrl}${formatDateForUrl(roundedDate, config.format)}`;
+
+          const imgElement = document.getElementById(`${id}_img`);
+          const timeElement = document.getElementById(`${id}_time`);
+          const dtInput = document.getElementById(`${id}_datetime`);
+
+          imgElement.src = url;
+          
+          imgElement.onload = () => {
+              timeElement.textContent = roundedDate.toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) + ' (HKT)';
+              imgElement.style.filter = 'none'; // Remove loading effect
+          };
+          
+          imgElement.onerror = () => {
+              timeElement.textContent = `圖像未找到於 ${roundedDate.toLocaleString('zh-HK')} (HKT)`;
+              imgElement.src = placeholderSrc; // Show placeholder on error
+          };
+
+          if (dtInput) {
+              dtInput.value = formatForDateTimeInput(roundedDate);
+          }
+        }
+
+        // --- PUBLIC CONTROL FUNCTIONS ---
+        window.showPrevious = async function(id) {
+          const dtInput = document.getElementById(`${id}_datetime`);
+          if (!dtInput.value) return;
+          const minDate = new Date(dtInput.min);
+          const currentDate = new Date(dtInput.value);
+          const newDate = new Date(currentDate.getTime() - 5 * 60 * 1000);
+          if (newDate >= minDate) await updateImage(id, newDate);
+        }
+
+        window.showNext = async function(id) {
+            const dtInput = document.getElementById(`${id}_datetime`);
+            if (!dtInput.value) return;
+            const maxDate = new Date(dtInput.max);
+            const currentDate = new Date(dtInput.value);
+            const newDate = new Date(currentDate.getTime() + 5 * 60 * 1000);
+            if (newDate > maxDate) return;
+
+            const config = webcamConfig[id];
+            if (!config) return;
+            const roundedNewDate = getClosestFiveMinuteInterval(newDate);
+            const url = `${config.baseUrl}${formatDateForUrl(roundedNewDate, config.format)}`;
+
+            if (await checkImage(url)) {
+                await updateImage(id, roundedNewDate);
+            }
+        };
+
+        window.showLatest = async function(id) {
+          const timeElement = document.getElementById(`${id}_time`);
+          const imgElement = document.getElementById(`${id}_img`);
+          
+          timeElement.textContent = '正在尋找最新圖像...';
+          if (imgElement) {
+              imgElement.style.filter = 'blur(5px) grayscale(50%)'; // Visual effect while loading
+          }
+
+          const latestDate = await findLatestAvailableImage(id);
+          await updateImage(id, latestDate);
+        }
+
+        window.selectTime = async function(id) {
+          const dtInput = document.getElementById(`${id}_datetime`);
+          if (dtInput.value) await updateImage(id, new Date(dtInput.value));
+        }
+
+        // --- INITIALIZATION & UNIVERSAL LAZY LOADING ---
+        function setDateTimeInputConstraints() {
+            const now = new Date();
+            const past = new Date(now.getTime() - 48.5 * 60 * 60 * 1000); 
+            const maxString = formatForDateTimeInput(now);
+            const minString = formatForDateTimeInput(past);
+
+            for (const id of Object.keys(webcamConfig)) {
+                const dtInput = document.getElementById(`${id}_datetime`);
+                if (dtInput) {
+                    dtInput.min = minString;
+                    dtInput.max = maxString;
+                }
+            }
+        }
+
+        function initializeLazyLoading() {
+            const lazyObserver = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const target = entry.target;
+                        const lazyType = target.dataset.lazyType;
+
+                        // Handle simple images with data-src
+                        if (target.tagName === 'IMG' && target.dataset.src) {
+                            target.src = target.dataset.src;
+                            target.removeAttribute('data-src');
+                        }
+                        // Handle HKO webcams with data-id
+                        else if (target.classList.contains('hko-webcam') && target.dataset.id) {
+                            // The decorator for Shek Pik will intercept this call
+                            window.showLatest(target.dataset.id);
+                        }
+                        // Handle script initializers
+                        else if (lazyType === 'macau') {
+                            if (typeof window.initMacauCams === 'function') window.initMacauCams();
+                        }
+                        else if (lazyType === 'szx') {
+                            if (typeof window.initSzxCam === 'function') window.initSzxCam();
+                        }
+                        
+                        observer.unobserve(target);
+                    }
+                });
+            }, {
+                rootMargin: '0px 0px 200px 0px' // Start loading when 200px away
+            });
+
+            // Find ALL lazy targets and observe them
+            const lazyTargets = document.querySelectorAll('.lazy-target');
+            lazyTargets.forEach(target => {
+                // Set placeholder for images that are lazy targets
+                if (target.tagName === 'IMG' && (target.dataset.src || target.classList.contains('hko-webcam'))) {
+                    target.src = placeholderSrc;
+                }
+                lazyObserver.observe(target);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            setDateTimeInputConstraints();
+            initializeLazyLoading();
+        });
+    })();
+  </script>
+
+  <!-- Script for SMG Macau Webcams -->
+  <script>
+      // Self-executing function to scope Macau variables
+      (function() {
+          class WebcamViewer {
+              constructor() {
+                  this.currentTimestamps = { pip: 1750813566, oip: 1750813566 };
+                  this.increment = 900;
+                  this.baseTimestamp = 1750813566;
+                  this.baseTime = new Date('2025-06-25T09:00:00+08:00').getTime() / 1000;
+                  this.timestampCache = new Map();
+                  this.loadingStates = { pip: false, oip: false };
+                  this.maxCacheSize = 100;
+                  
+                  this.initEventListeners();
+                  this.initialize();
+              }
+
+              initEventListeners() {
+                  document.getElementById('prevPipBtn').onclick = () => this.showPreviousImage('pip');
+                  document.getElementById('nextPipBtn').onclick = () => this.showNextImage('pip');
+                  document.getElementById('latestPip').onclick = () => this.showLatestImage('pip');
+                  document.getElementById('timePickerPip').onchange = () => this.showSelectedTimeImage('pip');
+                  
+                  document.getElementById('prevOipBtn').onclick = () => this.showPreviousImage('oip');
+                  document.getElementById('nextOipBtn').onclick = () => this.showNextImage('oip');
+                  document.getElementById('latestOip').onclick = () => this.showLatestImage('oip');
+                  document.getElementById('timePickerOip').onchange = () => this.showSelectedTimeImage('oip');
+              }
+
+              getImageUrl(timestamp, prefix = 'pipcam') {
+                  const filename = prefix === 'pipcam' ? 'pipcam24.JPG' : 'oipcam24.JPG';
+                  return `https://cms.smg.gov.mo/uploads/album/${prefix}_${timestamp}/${filename}`;
+              }
+
+              // 新增的格式化日期時間函數，用於 datetime-local input
+              formatForDateTimeInput(date) {
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                  const day = String(date.getDate()).padStart(2, '0');
+                  const hours = String(date.getHours()).padStart(2, '0');
+                  const minutes = String(date.getMinutes()).padStart(2, '0');
+                  return `${year}-${month}-${day}T${hours}:${minutes}`;
+              }
+
+              updateImage(prefix, timestamp) {
+                  const img = document.getElementById(`webcamImage${prefix === 'pip' ? 'Pip' : 'Oip'}`);
+                  const timestampSpan = document.getElementById(`timestamp${prefix === 'pip' ? 'Pip' : 'Oip'}`);
+                  const timePicker = document.getElementById(`timePicker${prefix === 'pip' ? 'Pip' : 'Oip'}`);
+
+                  img.src = this.getImageUrl(timestamp, prefix === 'pip' ? 'pipcam' : 'oipcam');
+                  
+                  // Create date from the original timestamp
+                  const originalDate = new Date(timestamp * 1000);
+                  
+                  // Format and display the ORIGINAL time in the text span
+                  const formattedOriginalTime = originalDate.toLocaleString('zh-HK', { 
+                      timeZone: 'Asia/Macau', year: 'numeric', month: '2-digit', day: '2-digit', 
+                      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false 
+                  });
+                  timestampSpan.textContent = `${formattedOriginalTime} (MCT)`;
+                  
+                  // Calculate the ROUNDED date for the time picker
+                  const roundedDate = new Date(originalDate);
+                  const minutes = roundedDate.getMinutes();
+                  roundedDate.setMinutes(Math.floor(minutes / 15) * 15, 0, 0); // Round down to nearest 15 mins
+                  
+                  // Update the time picker's value with the rounded time
+                  if (timePicker) {
+                      timePicker.value = this.formatForDateTimeInput(roundedDate);
+                  }
+
+                  this.currentTimestamps[prefix] = timestamp; // Keep the original timestamp for navigation
+                  this.hideError(prefix);
+              }
+
+              getCurrentTimestamp() {
+                  const now = Math.floor(Date.now() / 1000);
+                  const elapsedSinceBase = now - this.baseTime;
+                  const periods = Math.floor(elapsedSinceBase / 900);
+                  return this.baseTimestamp + (periods * this.increment);
+              }
+
+              // --- MODIFIED SECTION ---
+              getTimestampVariations(targetTimestamp) {
+                  // Normalize the timestamp to ensure the base ends in ..66
+                  const baseTimestamp = targetTimestamp - (targetTimestamp % 100) + 66;
+              
+                  const variations = [baseTimestamp]; // Start with the most likely timestamp
+              
+                  // Generate variations by expanding outwards from the base, from 1 to 30 seconds
+                  // This creates a prioritized list: [base, base+1, base-1, base+2, base-2, ...]
+                  for (let i = 1; i <= 30; i++) {
+                      variations.push(baseTimestamp + i); // Check timestamp ahead
+                      variations.push(baseTimestamp - i); // Check timestamp behind
+                  }
+              
+                  return variations;
+              }
+              // --- END OF MODIFIED SECTION ---
+
+              async tryLoadImage(prefix, timestamp) {
+                  if (this.timestampCache.has(`${prefix}_${timestamp}`)) {
+                      this.updateImage(prefix, timestamp);
+                      return timestamp;
+                  }
+                  return new Promise((resolve, reject) => {
+                      const img = new Image();
+                      img.src = this.getImageUrl(timestamp, prefix === 'pip' ? 'pipcam' : 'oipcam');
+                      const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
+                      img.onload = () => {
+                          clearTimeout(timeout);
+                          if (this.timestampCache.size >= this.maxCacheSize) {
+                              this.timestampCache.delete(this.timestampCache.keys().next().value);
+                          }
+                          this.timestampCache.set(`${prefix}_${timestamp}`, true);
+                          this.updateImage(prefix, timestamp);
+                          resolve(timestamp);
+                      };
+                      img.onerror = () => { clearTimeout(timeout); reject(new Error('Load failed')); };
+                  });
+              }
+
+              async tryTimestampsParallel(prefix, timestamps) {
+                  for (let i = 0; i < timestamps.length; i += 3) {
+                      const batch = timestamps.slice(i, i + 3);
+                      try { return await Promise.any(batch.map(ts => this.tryLoadImage(prefix, ts))); } catch {}
+                  }
+                  throw new Error('All timestamps failed');
+              }
+
+              setLoadingState(prefix, loading) {
+                  this.loadingStates[prefix] = loading;
+                  const suffix = prefix === 'pip' ? 'Pip' : 'Oip';
+                  document.getElementById(`loading${suffix}`).classList.toggle('show', loading);
+                  document.getElementById(`webcamImage${suffix}`).style.opacity = loading ? '0.7' : '1';
+                  // Disable only the latest button and time picker during load
+                  document.getElementById(`latest${suffix}`).disabled = loading;
+                  document.getElementById(`timePicker${suffix}`).disabled = loading;
+              }
+
+              setDateTimeInputConstraints() {
+                  const now = new Date();
+                  const past = new Date(now.getTime() - 118 * 60 * 60 * 1000); // 118 hours ago
+                  const formatForInput = (date) => {
+                      const year = date.getFullYear();
+                      const month = String(date.getMonth() + 1).padStart(2, '0');
+                      const day = String(date.getDate()).padStart(2, '0');
+                      const hours = String(date.getHours()).padStart(2, '0');
+                      const minutes = String(date.getMinutes()).padStart(2, '0');
+                      return `${year}-${month}-${day}T${hours}:${minutes}`;
+                  };
+                  const maxString = formatForInput(now);
+                  const minString = formatForInput(past);
+                  document.getElementById('timePickerPip').min = minString;
+                  document.getElementById('timePickerPip').max = maxString;
+                  document.getElementById('timePickerOip').min = minString;
+                  document.getElementById('timePickerOip').max = maxString;
+              }
+
+              showError(prefix, message) {
+                  const errorEl = document.getElementById(`error${prefix === 'pip' ? 'Pip' : 'Oip'}`);
+                  errorEl.textContent = message;
+                  errorEl.classList.add('show');
+              }
+
+              hideError(prefix) {
+                  document.getElementById(`error${prefix === 'pip' ? 'Pip' : 'Oip'}`).classList.remove('show');
+              }
+
+              async findAndLoadImage(prefix, startTimestamp, direction = -1) {
+                  if (this.loadingStates[prefix]) return;
+                  this.setLoadingState(prefix, true);
+                  try {
+                      let ts = startTimestamp;
+                      for (let i = 0; i < 20; i++) { // Limit search depth
+                          try {
+                              await this.tryTimestampsParallel(prefix, this.getTimestampVariations(ts));
+                              return;
+                          } catch {
+                              ts += (this.increment * direction);
+                          }
+                      }
+                      throw new Error('Image not found');
+                  } catch (error) {
+                      this.showError(prefix, '找不到圖像。');
+                  } finally {
+                      this.setLoadingState(prefix, false);
+                  }
+              }
+
+              showPreviousImage(prefix) { this.findAndLoadImage(prefix, this.currentTimestamps[prefix] - this.increment, -1); }
+              showNextImage(prefix) { this.findAndLoadImage(prefix, this.currentTimestamps[prefix] + this.increment, 1); }
+              showLatestImage(prefix) { this.findAndLoadImage(prefix, this.getCurrentTimestamp(), -1); }
+
+              async showSelectedTimeImage(prefix) {
+                  const timePicker = document.getElementById(`timePicker${prefix === 'pip' ? 'Pip' : 'Oip'}`);
+                  if (!timePicker.value) { this.showError(prefix, '請選擇日期和時間'); return; }
+                  
+                  const selectedTime = new Date(timePicker.value);
+                  const selectedTimestamp = Math.floor(selectedTime.getTime() / 1000);
+
+                  // 獲取時間選擇器的 min 和 max 屬性值並轉換為 Date 物件
+                  const minDate = new Date(timePicker.min);
+                  const maxDate = new Date(timePicker.max);
+
+                  // 檢查所選時間是否超出允許範圍
+                  if (selectedTime < minDate || selectedTime > maxDate) {
+                      this.showError(prefix, `所選時間超出範圍。請選擇 ${this.formatForDateTimeInput(minDate)} 到 ${this.formatForDateTimeInput(maxDate)} 之間的時間。`);
+                      await this.showLatestImage(prefix); // 回到最新圖像
+                      return;
+                  }
+                  
+                  const elapsedSinceBase = selectedTimestamp - this.baseTime;
+                  const periods = Math.round(elapsedSinceBase / 900);
+                  let targetTimestamp = this.baseTimestamp + (periods * this.increment);
+                  
+                  if (targetTimestamp > this.getCurrentTimestamp()) {
+                      this.showError(prefix, '所選時間是未來時間，顯示最新可用圖像');
+                      await this.showLatestImage(prefix);
+                  } else {
+                      await this.findAndLoadImage(prefix, targetTimestamp, -1);
+                  }
+              }
+
+              async initialize() {
+                  this.setDateTimeInputConstraints();
+                  await Promise.all([ this.showLatestImage('pip'), this.showLatestImage('oip') ]);
+                  setInterval(() => Promise.all([ this.showLatestImage('pip'), this.showLatestImage('oip') ]), 15 * 60 * 1000);
+              }
+          }
+          // MODIFIED: Defer initialization until called by the lazy loader
+          window.initMacauCams = () => {
+              if (window.macauCamsInitialized) return;
+              window.macauCamsInitialized = true;
+              new WebcamViewer();
+          };
+      })();
+  </script>
+
+
+  <!-- Script for HKO Shek Pik Webcam-->
+  <script>
+    // This self-executing function creates a dedicated controller for the Shek Pik webcam.
+    // It "decorates" the original global functions (showPrevious, showNext, etc.)
+    // to intercept calls for 'shek_pik' and use the new, advanced logic,
+    // while passing all other calls back to the original functions.
+    (function() {
+        // --- DOM Elements and Constants for Shek Pik ---
+        const imageElement = document.getElementById('shek_pik_imj');
+        const timestampElement = document.getElementById('shek_pik_time');
+        const timePicker = document.getElementById('shek_pik_datetime');
+
+        const HKO_TIMEZONE_OFFSET = 8 * 60; // Hong Kong is UTC+8
+        const MAX_SEARCH_ATTEMPTS = 288; // 24 hours in 5-minute intervals
+        const PLACEHOLDER_SVG = '';
+
+        let currentDate = new Date(); // Holds the date of the currently displayed image
+
+        // --- Helper Functions ---
+
+        /**
+         * FIXED: Formats a Date object into the YYYY-MM-DDTHH:mm string 
+         * required for the datetime-local input.
+         * @param {Date} date - The date to format.
+         * @returns {string} The formatted string for the input element.
+         */
+        function formatDateForPicker(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
+        }
+
+        function getCurrentHktDate() {
+            const now = new Date();
+            const localOffset = now.getTimezoneOffset() * 60000;
+            const utc = now.getTime() + localOffset;
+            return new Date(utc + (HKO_TIMEZONE_OFFSET * 60000));
+        }
+
+        function getSafeLatestHktDate() {
+            const DELAY_MINUTES = 4;
+            const hktNow = getCurrentHktDate();
+            return new Date(hktNow.getTime() - DELAY_MINUTES * 60 * 1000);
+        }
+
+        function buildImageUrl(date) {
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes();
+            const roundedMinutes = Math.floor(minutes / 5) * 5;
+            const filenameMinutes = (roundedMinutes + 2).toString().padStart(2, '0');
+            const baseURL = 'https://www.hko.gov.hk/gts/astronomy/image/HKSP/';
+            const imageName = `asc_HKSP_h${hours}m${filenameMinutes}.jpg`;
+            return `${baseURL}${imageName}`;
+        }
+
+        function updateTimestampText(date) {
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes();
+            const roundedMinutes = Math.floor(minutes / 5) * 5;
+            const displayMinutes = roundedMinutes.toString().padStart(2, '0');
+            timestampElement.textContent = `${year}-${month}-${day} ${hours}:${displayMinutes} HKT`;
+        }
+
+        // --- Core Image Loading Logic ---
+
+        function findAndLoadLatest(startDate, attempts = 0) {
+            if (attempts >= MAX_SEARCH_ATTEMPTS) {
+                timestampElement.textContent = "No images found in the last 24 hours.";
+                imageElement.src = PLACEHOLDER_SVG;
+                imageElement.style.filter = 'none'; // Clear filter on final error
+                return;
+            }
+
+            // On the very first attempt of a search, apply loading effect and reset text
+            if (attempts === 0) {
+                imageElement.style.filter = 'blur(5px)';
+                timestampElement.textContent = '...';
+            }
+
+            const imageUrl = buildImageUrl(startDate);
+
+            const checker = new Image();
+            checker.onload = () => {
+                imageElement.src = imageUrl;
+                imageElement.style.filter = 'none'; // Remove loading effect on success
+                currentDate = startDate;
+                updateTimestampText(startDate);
+                timePicker.value = formatDateForPicker(currentDate);
+            };
+            checker.onerror = () => {
+                const nextDateToTry = new Date(startDate.getTime() - 5 * 60 * 1000);
+                findAndLoadLatest(nextDateToTry, attempts + 1);
+            };
+            checker.src = imageUrl;
+        }
+        
+        function findAndLoadNext(startDate, attempts = 0) {
+            const safeHktNow = getSafeLatestHktDate();
+            if (startDate > safeHktNow || attempts >= MAX_SEARCH_ATTEMPTS) {
+                timestampElement.textContent = "No newer images found. Displaying the latest available.";
+                imageElement.style.filter = 'none'; // Clear filter
+                findAndLoadLatest(safeHktNow);
+                return;
+            }
+            
+            // Apply loading effect and reset text
+            if (attempts === 0) {
+                imageElement.style.filter = 'blur(5px)';
+                timestampElement.textContent = '...';
+            }
+
+            const imageUrl = buildImageUrl(startDate);
+
+            const checker = new Image();
+            checker.onload = () => {
+                imageElement.src = imageUrl;
+                imageElement.style.filter = 'none'; // Remove loading effect
+                currentDate = startDate;
+                updateTimestampText(startDate);
+                timePicker.value = formatDateForPicker(currentDate);
+            };
+            checker.onerror = () => {
+                const nextDateToTry = new Date(startDate.getTime() + 5 * 60 * 1000);
+                findAndLoadNext(nextDateToTry, attempts + 1);
+            };
+            checker.src = imageUrl;
+        }
+        
+        // --- DECORATOR PATTERN: Intercept global functions ---
+
+        // Wait for the original script to define the functions before we decorate them
+        document.addEventListener('DOMContentLoaded', () => {
+            // Store the original functions
+            const originalShowPrevious = window.showPrevious;
+            const originalShowNext = window.showNext;
+            const originalShowLatest = window.showLatest;
+            const originalSelectTime = window.selectTime;
+
+            // Redefine the global functions
+            window.showPrevious = function(id) {
+                if (id === 'shek_pik') {
+                    const newDate = new Date(currentDate.getTime() - 5 * 60 * 1000);
+                    findAndLoadLatest(newDate);
+                } else {
+                    originalShowPrevious(id);
+                }
+            };
+
+            window.showNext = function(id) {
+                if (id === 'shek_pik') {
+                    const newDate = new Date(currentDate.getTime() + 5 * 60 * 1000);
+                    findAndLoadNext(newDate);
+                } else {
+                    originalShowNext(id);
+                }
+            };
+
+            window.showLatest = function(id) {
+                if (id === 'shek_pik') {
+                    // Set time picker constraints for Shek Pik specifically
+                    const nowForPicker = new Date();
+                    const twentyFourHoursAgo = new Date(nowForPicker.getTime() - 24 * 60 * 60 * 1000);
+                    // FIXED: Use the corrected formatting function for min/max
+                    timePicker.max = formatDateForPicker(nowForPicker);
+                    timePicker.min = formatDateForPicker(twentyFourHoursAgo);
+                    
+                    findAndLoadLatest(getSafeLatestHktDate());
+                } else {
+                    originalShowLatest(id);
+                }
+            };
+
+            window.selectTime = function(id) {
+                if (id === 'shek_pik') {
+                    if (timePicker.value) {
+                        const localDate = new Date(timePicker.value);
+                        findAndLoadLatest(localDate);
+                    }
+                } else {
+                    originalSelectTime(id);
+                }
+            };
+        });
+    })();
+  </script>
+
+  
+  <!-- MODIFIED SCRIPT BLOCK for Status Bar and HKO Icons -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // --- Global State ---
+      let currentTimezone = 'HKT'; // State for toggling time zone
+      let atisDataForCycle = [];
+      let rightStatusCycleIndex = 0;
+      let windDisplayData = {
+          clk: null,
+          sc: null,
+          ty: null, 
+          tm: null
+      };
+      let sunEventData = {
+          text: '--:--',
+          type: 'sunset'
+      };
+      let tungChungAqhiData = {
+          level: '--',
+          iconUrl: ''
+      };
+      let qnhData = {
+          pressure: '--'
+      };
+
+      // --- Constants ---
+      const PROXY_URL = 'https://seep.eu.org/';
+      const WIND_URL = 'https://data.weather.gov.hk/weatherAPI/hko_data/regional-weather/latest_10min_wind_uc.csv';
+      const VISIBILITY_URL = 'https://data.weather.gov.hk/weatherAPI/opendata/opendata.php?dataType=LTMV&lang=tc&rformat=csv';
+      const TEMP_URL = 'https://data.weather.gov.hk/weatherAPI/hko_data/regional-weather/latest_1min_temperature_uc.csv';
+      const HUMIDITY_URL = 'https://data.weather.gov.hk/weatherAPI/hko_data/regional-weather/latest_1min_humidity_uc.csv';
+      const PRESSURE_URL = 'https://data.weather.gov.hk/weatherAPI/hko_data/regional-weather/latest_1min_pressure_uc.csv';
+      const AQHI_URL = 'https://www.aqhi.gov.hk/epd/ddata/html/out/aqhi_ind_rss_Eng.xml';
+
+      const directionMap = {
+          '北': 'N', '東北': 'NE', '東': 'E', '東南': 'SE', '南': 'S', '西南': 'SW', '西': 'W', '西北': 'NW',
+          '北北東': 'NNE', '東北東': 'ENE', '東南東': 'ESE', '南南東': 'SSE', '南南西': 'SSW', '西南西': 'WSW', '西北西': 'WNW', '北北西': 'NNW',
+          '風向不定': 'VRB', '無風': 'CALM'
+      };
+
+      // --- Helper Functions ---
+      
+      /**
+       * A helper function to pause execution for a specified duration.
+       * @param {number} ms - The number of milliseconds to wait.
+       * @returns {Promise<void>}
+       */
+      function sleep(ms) {
+          return new Promise(resolve => setTimeout(resolve, ms));
+      }
+
+      /**
+       * ENHANCED: A robust fetch function with timeout and retry logic.
+       * @param {string} url - The URL to fetch.
+       * @param {object} options - Fetch options.
+       * @param {number} retries - Number of retry attempts.
+       * @param {number} timeout - Timeout in milliseconds for each attempt.
+       * @returns {Promise<Response|null>} The response object or null if all retries fail.
+       */
+      async function fetchWithRetry(url, options = {}, retries = 5, timeout = 5000) {
+          for (let i = 0; i < retries; i++) {
+              try {
+                  const controller = new AbortController();
+                  const { signal } = controller;
+                  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+                  const response = await fetch(url, { ...options, signal });
+                  clearTimeout(timeoutId);
+
+                  if (!response.ok) {
+                      throw new Error(`HTTP error! status: ${response.status}`);
+                  }
+                  return response; // Success
+              } catch (error) {
+                  console.warn(`Fetch attempt ${i + 1} for ${url} failed: ${error.message}. Retrying...`);
+                  if (i < retries - 1) {
+                      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Incremental backoff
+                  }
+              }
+          }
+          console.error(`All fetch retries for ${url} failed.`);
+          return null; // All retries failed
+      }
+
+      async function fetchAndParseCSV(url) {
+        try {
+          const cacheBustedUrl = `${url}${url.includes('?') ? '&' : '?'}_=${new Date().getTime()}`;
+          const response = await fetchWithRetry(PROXY_URL + encodeURIComponent(cacheBustedUrl));
+          
+          if (!response) {
+              throw new Error('Failed to fetch CSV data after multiple retries.');
+          }
+
+          const text = await response.text();
+          const lines = text.trim().split('\n');
+          if (lines.length < 2) return [];
+          const headers = lines[0].split(',').map(h => h.trim());
+          const data = [];
+          for (let i = 1; i < lines.length; i++) {
+              const values = lines[i].split(',').map(v => v.trim());
+              if (values.length === headers.length) {
+                  const obj = {};
+                  headers.forEach((h, idx) => { obj[h] = values[idx]; });
+                  data.push(obj);
+              }
+          }
+          return data;
+        } catch (err) {
+          console.error('資料載入或解析失敗:', url, err);
+          return null;
+        }
+      }
+
+      function updateClock() {
+        const timeEl = document.getElementById('status-time');
+        if (!timeEl) return;
+        const now = new Date();
+        const options = {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: currentTimezone === 'UTC' ? 'UTC' : 'Asia/Hong_Kong'
+        };
+        const timeString = now.toLocaleTimeString('en-GB', options);
+        timeEl.textContent = timeString;
+      }
+
+      function updateSunriseSunset() {
+          const latitude = 22.3193;
+          const longitude = 114.1694;
+          const now = new Date();
+          const solarTimesToday = SunCalc.getTimes(now, latitude, longitude);
+          const sunsetToday = solarTimesToday.sunset;
+
+          const formatTime = (date) => {
+              if (!date || isNaN(date.getTime())) return '--:--';
+              return date.toLocaleTimeString('zh-HK', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: false,
+                  timeZone: 'Asia/Hong_Kong'
+              });
+          };
+
+          if (now.getTime() < sunsetToday.getTime()) {
+              sunEventData.text = formatTime(sunsetToday);
+              sunEventData.type = 'sunset';
+          } else {
+              const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+              const solarTimesTomorrow = SunCalc.getTimes(tomorrow, latitude, longitude);
+              const sunriseTomorrow = solarTimesTomorrow.sunrise;
+              sunEventData.text = formatTime(sunriseTomorrow);
+              sunEventData.type = 'sunrise';
+          }
+      }
+
+      function processVisibility(str) {
+          if (!str) return '--';
+          const numberMatch = str.match(/(\d+)/);
+          if (!numberMatch) return '--';
+          const number = numberMatch[1];
+          if (str.includes('公里')) return `${number} km`;
+          if (str.includes('m')) return `${number} m`;
+          return number;
+      }
+      
+      async function updateAllWeatherData() {
+          const [windData, visibilityData, tempData, humidityData, pressureData] = await Promise.all([
+              fetchAndParseCSV(WIND_URL),
+              fetchAndParseCSV(VISIBILITY_URL),
+              fetchAndParseCSV(TEMP_URL),
+              fetchAndParseCSV(HUMIDITY_URL),
+              fetchAndParseCSV(PRESSURE_URL)
+          ]);
+          
+          // MODIFICATION: Check if all fetches failed to provide a clear error state.
+          if (!windData && !visibilityData && !tempData && !humidityData && !pressureData) {
+              const windEl = document.getElementById('status-wind');
+              if (windEl) {
+                  windEl.textContent = 'Weather data unavailable';
+                  windEl.style.display = 'inline';
+                  windEl.style.color = '#dc3545'; // Error color red
+                  windEl.style.opacity = '1';
+              }
+              // Ensure other elements are hidden to avoid confusion
+              document.getElementById('status-temp').style.display = 'none';
+              document.getElementById('status-humidity').style.display = 'none';
+              document.getElementById('status-visibility').style.display = 'none';
+              return false; // Indicate failure
+          }
+
+
+          if (windData) {
+              const clkWind = windData.find(d => d['自動氣象站'] === '赤鱲角');
+              if (clkWind) {
+                  const dir = directionMap[clkWind['十分鐘平均風向（方位點）']] || clkWind['十分鐘平均風向（方位點）'];
+                  windDisplayData.clk = `${clkWind['十分鐘平均風速（公里/小時）'] || '--'}km/h ${dir || ''}`;
+                  const windEl = document.getElementById('status-wind');
+                  if (windEl) windEl.style.display = 'inline';
+              }
+              const shaChauWind = windData.find(d => d['自動氣象站'] === '沙洲');
+              if (shaChauWind) {
+                  const dir = directionMap[shaChauWind['十分鐘平均風向（方位點）']] || shaChauWind['十分鐘平均風向（方位點）'];
+                  windDisplayData.sc = `${shaChauWind['十分鐘平均風速（公里/小時）'] || '--'}km/h ${dir || ''}`;
+              }
+              const tsingYiWind = windData.find(d => d['自動氣象站'] === '青衣');
+              if (tsingYiWind) {
+                  const dir = directionMap[tsingYiWind['十分鐘平均風向（方位點）']] || tsingYiWind['十分鐘平均風向（方位點）'];
+                  windDisplayData.ty = `${tsingYiWind['十分鐘平均風速（公里/小時）'] || '--'}km/h ${dir || ''}`;
+              }
+              const tuenMunWind = windData.find(d => d['自動氣象站'] === '屯門');
+              if (tuenMunWind) {
+                  const dir = directionMap[tuenMunWind['十分鐘平均風向（方位點）']] || tuenMunWind['十分鐘平均風向（方位點）'];
+                  windDisplayData.tm = `${tuenMunWind['十分鐘平均風速（公里/小時）'] || '--'}km/h ${dir || ''}`;
+              }
+          }
+          if (visibilityData) {
+              const clkVis = visibilityData.find(d => d['自動氣象站'] === '赤鱲角');
+              if (clkVis) {
+                  document.getElementById('status-visibility').textContent = processVisibility(clkVis['十分鐘平均能見度']);
+              }
+          }
+          if (tempData) {
+              const clkTemp = tempData.find(d => d['自動氣象站'] === '赤鱲角');
+              if (clkTemp) {
+                  document.getElementById('status-temp').textContent = `${clkTemp['氣溫（攝氏）'] || '--'}°C`;
+              }
+          }
+          if (humidityData) {
+              const clkHum = humidityData.find(d => d['自動氣象站'] === '赤鱲角');
+              if (clkHum) {
+                  document.getElementById('status-humidity').textContent = `${clkHum['相對濕度（百分比）'] || '--'}%`;
+              }
+          }
+          if (pressureData) {
+              const clkPressure = pressureData.find(d => d['自動氣象站'] === '赤鱲角');
+              if (clkPressure) {
+                  qnhData.pressure = clkPressure['平均海平面氣壓（百帕斯卡）'] || '--';
+              }
+          }
+          return true; // Indicate success
+      }
+
+      async function updateAqhiData() {
+        try {
+            const cacheBustedUrl = `${AQHI_URL}?_=${new Date().getTime()}`;
+            const response = await fetchWithRetry(PROXY_URL + encodeURIComponent(cacheBustedUrl));
+
+            if (!response) {
+                throw new Error("Failed to fetch AQHI data after multiple retries.");
+            }
+            
+            const xmlText = await response.text();
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "application/xml");
+            
+            const items = xmlDoc.querySelectorAll("item");
+            let found = false;
+            for (const item of items) {
+                const title = item.querySelector("title").textContent;
+                if (title === 'Tung Chung') {
+                    const description = item.querySelector("description").textContent;
+                    const match = description.match(/: (\d+\+?)\s/);
+                    if (match && match[1]) {
+                        const levelStr = match[1];
+                        let iconLevel;
+                        if (levelStr === '10+') {
+                            iconLevel = 11;
+                        } else {
+                            iconLevel = parseInt(levelStr, 10);
+                        }
+                        
+                        tungChungAqhiData.level = levelStr;
+                        tungChungAqhiData.iconUrl = `https://www.aqhi.gov.hk/common/images/icon/icon_legend_level_${iconLevel}.svg`;
+                        found = true;
+                    }
+                    break;
+                }
+            }
+            if (!found) {
+                throw new Error("Tung Chung AQHI data not found in feed.");
+            }
+        } catch (error) {
+            console.error("Failed to fetch or parse AQHI data:", error);
+            tungChungAqhiData.level = 'N/A';
+            tungChungAqhiData.iconUrl = '';
+        }
+      }
+
+      async function initialWeatherLoad() {
+          updateSunriseSunset();
+          // Wait for weather data and AQHI data to load
+          const [weatherSuccess, _] = await Promise.all([updateAllWeatherData(), updateAqhiData()]);
+          // Only start the animation cycles if the initial data fetch was successful
+          if (weatherSuccess) {
+              startWindCycle();
+              cycleLeftStatusBar();
+          }
+      }
+
+      function periodicWeatherUpdate() {
+          updateSunriseSunset();
+          updateAllWeatherData();
+          updateAqhiData();
+      }
+
+      async function updateAndParseAtis() {
+          const atisUrl = 'https://r.jina.ai/https://atis.cad.gov.hk/ATIS/ATISweb/atis.php';
+          const RETRY_DELAY = 5000;
+
+          function expandRunwayString(runwayStr) {
+              if (!runwayStr) return '';
+              const parts = runwayStr.split('/');
+              if (parts.length <= 1) return runwayStr;
+              const firstPart = parts[0].trim();
+              const runwayNumberMatch = firstPart.match(/^\d+/);
+              if (!runwayNumberMatch) return runwayStr.replace(/\//g, ', ');
+              const runwayNumber = runwayNumberMatch[0];
+              const expandedParts = [firstPart];
+              for (let i = 1; i < parts.length; i++) {
+                  const part = parts[i].trim();
+                  if (/^[A-Z]+$/.test(part)) {
+                      expandedParts.push(runwayNumber + part);
+                  } else {
+                      expandedParts.push(part);
+                  }
+              }
+              return expandedParts.join(', ');
+          }
+          
+          while (true) {
+              try {
+                  const cacheBustedAtisUrl = `${atisUrl}?_=${new Date().getTime()}`;
+                  const response = await fetch(cacheBustedAtisUrl);
+                  if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
+                  const markdown = await response.text();
+                  let arrivalRunway = null;
+                  let departureRunway = null;
+                  const arrivalRegex = /ARRIVALS, RWY\s+([^\n\r.]+)/i;
+                  const departureRegex = /DEPARTURES, RWY\s+([^\n\r.]+)/i;
+                  const arrivalMatch = markdown.match(arrivalRegex);
+                  if (arrivalMatch && arrivalMatch[1]) arrivalRunway = expandRunwayString(arrivalMatch[1].trim());
+                  const departureMatch = markdown.match(departureRegex);
+                  if (departureMatch && departureMatch[1]) departureRunway = expandRunwayString(departureMatch[1].trim());
+                  const newAtisData = [];
+                  if (arrivalRunway) newAtisData.push({ type: 'ARR', interpreted: arrivalRunway });
+                  if (departureRunway) newAtisData.push({ type: 'DEP', interpreted: departureRunway });
+                  atisDataForCycle = newAtisData;
+                  break;
+              } catch (error) {
+                  console.error(`Error fetching ATIS: ${error.message}. Retrying...`);
+                  atisDataForCycle = [];
+                  await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+              }
+          }
+      }
+      
+      async function startAtisUpdates() {
+        await updateAndParseAtis();
+        setInterval(updateAndParseAtis, 60000);
+      }
+
+      /**
+       * MODIFICATION: Replaced the original function with a robust async/await version.
+       * This function cycles through different wind data sources in a single element.
+       */
+      async function startWindCycle() {
+          const windEl = document.getElementById('status-wind');
+          if (!windEl) return;
+
+          const cycleConfig = [
+              { key: 'clk', color: 'rgb(17, 24, 39)', duration: 6000, fallback: '--km/h --' },
+              { key: 'sc',  color: '#800000', duration: 2000, fallback: '--km/h --' },
+              { key: 'ty',  color: '#33cc33', duration: 2000, fallback: '--km/h --' },
+              { key: 'tm',  color: '#0099cc', duration: 2000, fallback: '--km/h --' }
+          ];
+          
+          let currentIndex = 0;
+          
+          while(true) {
+              const currentStep = cycleConfig[currentIndex];
+              
+              windEl.style.opacity = 0;
+              await sleep(500); // Wait for fade-out transition
+
+              windEl.textContent = windDisplayData[currentStep.key] || currentStep.fallback;
+              windEl.style.color = currentStep.color;
+              windEl.style.opacity = 1;
+
+              await sleep(currentStep.duration); // Wait for the specified duration
+              
+              currentIndex = (currentIndex + 1) % cycleConfig.length;
+          }
+      }
+
+      /**
+       * MODIFICATION: Replaced the original function with a robust async/await version.
+       * This function cycles through Temperature, Humidity, and Visibility elements.
+       */
+      async function cycleLeftStatusBar() {
+          const elements = [
+              document.getElementById('status-temp'),
+              document.getElementById('status-humidity'),
+              document.getElementById('status-visibility')
+          ];
+
+          if (elements.some(el => !el)) return;
+
+          // Initial setup
+          elements.forEach((el, index) => {
+              el.style.display = index === 0 ? 'inline' : 'none';
+              el.style.opacity = index === 0 ? '1' : '0';
+          });
+
+          let currentIndex = 0;
+
+          while (true) {
+              await sleep(5000); // Wait 5s on the current item
+
+              const currentEl = elements[currentIndex];
+              const nextIndex = (currentIndex + 1) % elements.length;
+              const nextEl = elements[nextIndex];
+              
+              currentEl.style.opacity = '0'; // Fade out current
+              await sleep(500); // Wait for transition to finish
+              currentEl.style.display = 'none'; // Hide it
+
+              nextEl.style.display = 'inline'; // Show the next one
+              // A tiny delay ensures the 'display' property is applied before the opacity transition starts
+              await sleep(10); 
+              nextEl.style.opacity = '1'; // Fade in next
+
+              currentIndex = nextIndex;
+          }
+      }
+
+
+      function cycleRightStatusBar() {
+          setInterval(() => {
+              const runwayInfoEl = document.getElementById('runwayInfo');
+              if (!runwayInfoEl) return;
+
+              const arrInfo = atisDataForCycle.find(r => r.type === 'ARR');
+              const depInfo = atisDataForCycle.find(r => r.type === 'DEP');
+              const displayItems = [];
+
+              // 1. Sunrise/Sunset
+              if (sunEventData.text !== '--:--') {
+                  const arrowPath = sunEventData.type === 'sunset' ? 'm16 6-4 4-4-4' : 'm16 10-4-4-4 4';
+                  const sunIconHtml = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-500" style="display:inline-block;"><path d="M12 10V2"></path><path d="m4.93 10.93 1.41 1.41"></path><path d="M2 18h2"></path><path d="M20 18h2"></path><path d="m19.07 10.93-1.41 1.41"></path><path d="M22 22H2"></path><path d="${arrowPath}"></path><path d="M16 18a4 4 0 0 0-8 0"></path></svg>`;
+                  displayItems.push(sunIconHtml + `<span>${sunEventData.text}</span>`);
+              }
+
+              // 2. Arrival Runway
+              if (arrInfo) {
+                  const icon = 'https://fra-flugplan.de/fra-flugplan/img/arrival-yellow-16x14.png';
+                  displayItems.push(`<img src="${icon}" alt="ARR" class="runway-icon"> <span>RWY ${arrInfo.interpreted}</span>`);
+              }
+              
+              // 3. Departure Runway
+              if (depInfo) {
+                  const icon = 'https://fra-flugplan.de/fra-flugplan/img/departure-yellow-16x14.png';
+                  displayItems.push(`<img src="${icon}" alt="DEP" class="runway-icon"> <span>RWY ${depInfo.interpreted}</span>`);
+              }
+              
+              // 4. QNH
+              if (qnhData.pressure !== '--') {
+                  displayItems.push(`<span>QNH ${qnhData.pressure}</span>`);
+              }
+
+              // 5. AQHI Icon
+              if (tungChungAqhiData.iconUrl) {
+                  displayItems.push(`<img src="${tungChungAqhiData.iconUrl}" alt="AQHI" class="runway-icon" style="width:70px; height:auto; object-fit:contain;">`);
+              }
+              
+              if (displayItems.length > 0) {
+                  if (runwayInfoEl.style.display === 'none') {
+                      runwayInfoEl.style.display = 'flex';
+                  }
+                  runwayInfoEl.style.opacity = 0;
+                  setTimeout(() => {
+                      runwayInfoEl.innerHTML = displayItems[rightStatusCycleIndex % displayItems.length];
+                      runwayInfoEl.style.opacity = 1;
+                      rightStatusCycleIndex++;
+                  }, 500);
+              } else {
+                  runwayInfoEl.innerHTML = '';
+              }
+          }, 5000);
+      }
+
+      async function updateHkoIcons() {
+          const iconsContainer = document.getElementById('hko-icons-container');
+          if (!iconsContainer) return;
+          try {
+              const rhrreadApi = `https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=tc&_=${new Date().getTime()}`;
+              const warnsumApi = `https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc&_=${new Date().getTime()}`;
+              const [rhrreadResponse, warnsumResponse] = await Promise.all([fetch(rhrreadApi), fetch(warnsumApi)]);
+              const rhrreadData = await rhrreadResponse.json();
+              const warnsumData = await warnsumResponse.json();
+              iconsContainer.innerHTML = '';
+              
+              if (rhrreadData && rhrreadData.icon && rhrreadData.icon.length > 0) {
+                  iconsContainer.innerHTML += `<img src="https://www.hko.gov.hk/images/HKOWxIconOutline/pic${rhrreadData.icon[0]}.png" alt="Weather" class="w-5 h-5">`;
+              }
+
+              if (warnsumData && Object.keys(warnsumData).length > 0) {
+                  const warningIconMap = {'TC1':'tc1.gif','TC3':'tc3.gif','TC8NE':'tc8a.gif','TC8SE':'tc8b.gif','TC8NW':'tc8d.gif','TC8SW':'tc8c.gif','TC9':'tc9.gif','TC10':'tc10.gif','WRAINA':'raina.gif','WRAINR':'rainr.gif','WRAINB':'rainb.gif','WFIREY':'firey.gif','WFIRER':'firer.gif','WCOLD':'cold.gif','WHOT':'vhot.gif','WFNTSA':'ntfl.gif','WL':'landslip.gif','WMSGNL':'sms.gif','WTS':'ts.gif','WFROST':'frost.gif'};
+                  for (const key in warnsumData) {
+                      const iconFile = warningIconMap[warnsumData[key].code];
+                      if (iconFile) iconsContainer.innerHTML += `<img src="https://www.hko.gov.hk/tc/wxinfo/dailywx/images/${iconFile}" alt="${warnsumData[key].name}" class="w-5 h-5">`;
+                  }
+              }
+              iconsContainer.style.display = 'flex';
+          } catch (error) {
+              console.error('Failed to get HKO icons:', error);
+              iconsContainer.innerHTML = '<span class="text-red-500 text-xs font-bold">!</span>';
+              iconsContainer.style.display = 'flex';
+          }
+      }
+
+      // --- Initialization ---
+      // This function orchestrates the startup sequence
+      async function initializeApp() {
+          // 1. Setup non-data-dependent UI elements like the clock
+          const clockElement = document.getElementById('status-time');
+          if (clockElement) {
+              clockElement.style.cursor = 'pointer';
+              clockElement.title = 'Click to toggle between HKT and UTC';
+              clockElement.addEventListener('click', () => {
+                  currentTimezone = (currentTimezone === 'HKT') ? 'UTC' : 'HKT';
+                  updateClock();
+              });
+          }
+          updateClock();
+          setInterval(updateClock, 1000);
+
+          // 2. Immediately calculate sunrise/sunset data so it's ready for the first cycle.
+          updateSunriseSunset();
+
+          // 3. Start the right-side status bar cycle immediately.
+          // It will show sunrise/sunset time while other data loads in the background.
+          cycleRightStatusBar();
+
+          // 4. Kick off the ATIS data fetching process in the background.
+          // We don't 'await' it, so it doesn't block the main initialization.
+          startAtisUpdates();
+
+          // 5. Fetch the other critical weather data in parallel.
+          // The UI will update as this data becomes available.
+          await Promise.all([
+              initialWeatherLoad(),
+              updateHkoIcons()
+          ]);
+
+          // 6. Setup long-term periodic updates for data that was awaited.
+          setInterval(periodicWeatherUpdate, 10 * 60 * 1000);
+          setInterval(updateHkoIcons, 5 * 60 * 1000);
+      }
+
+      initializeApp().catch(err => console.error("Initialization failed:", err));
+    });
+  </script>
+
+
+  <!-- SCRIPT for Slider -->
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /**
+         * Initializes a self-contained, auto-playing slider for a given container.
+         * @param {HTMLElement} container The slider's container element.
+         */
+        function initializeSlider(container) {
+            const slides = container.querySelectorAll('.slide');
+            const dots = container.querySelectorAll('.dot');
+            const prevBtn = container.querySelector('.prev');
+            const nextBtn = container.querySelector('.next');
+            
+            // Don't initialize if there are no slides
+            if (slides.length === 0) {
+                return;
+            }
+
+            let slideIndex = 1;
+            let slideTimer;
+
+            /**
+             * The main function to display a specific slide and handle UI updates.
+             * @param {number} n The index of the slide to show.
+             */
+            function showSlides(n) {
+                // This logic handles looping back to the start or end of the slides
+                if (n > slides.length) { slideIndex = 1; }
+                if (n < 1) { slideIndex = slides.length; }
+
+                // Hide all slide elements
+                slides.forEach(slide => slide.style.display = "none");
+                
+                // Remove the "active" class from all dots if they exist
+                if (dots.length > 0) {
+                    dots.forEach(dot => dot.className = dot.className.replace(" active", ""));
+                }
+
+                // Display the correct slide and set the corresponding dot to "active"
+                slides[slideIndex - 1].style.display = "block";
+                if (dots.length > 0) {
+                    dots[slideIndex - 1].className += " active";
+                }
+
+                // Set a new timer to automatically advance the slide
+                clearTimeout(slideTimer);
+                slideTimer = setTimeout(() => showSlides(slideIndex += 1), 6000);
+            }
+
+            // Attach event listeners to navigation controls if they exist
+            if (nextBtn) {
+                nextBtn.addEventListener('click', () => showSlides(slideIndex += 1));
+            }
+
+            if (prevBtn) {
+                prevBtn.addEventListener('click', () => showSlides(slideIndex -= 1));
+            }
+            
+            if (dots.length > 0) {
+                dots.forEach((dot, index) => {
+                    dot.addEventListener('click', () => showSlides(slideIndex = index + 1));
+                });
+            }
+
+            // Start the slideshow
+            showSlides(slideIndex);
+        }
+
+        // --- INITIALIZATION ---
+        // Find all potential slider containers and initialize them.
+        // This query selects any element with class 'banner-slider' or 'slider-container'
+        // that contains at least one child with the class 'slide'.
+        document.querySelectorAll('.banner-slider, .slider-container').forEach(sliderContainer => {
+            if (sliderContainer.querySelector('.slide')) {
+                initializeSlider(sliderContainer);
+            }
+        });
+    });
+    </script>
+
+  <!-- SCRIPT for Scroll to Top Button -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const scrollToTopBtn = document.getElementById('scrollToTopBtn');
+
+        if (scrollToTopBtn) {
+            // Show or hide the button based on scroll position
+            window.onscroll = function() {
+                // A scroll position of > 100px is a good trigger point
+                if (document.body.scrollTop > 100 || document.documentElement.scrollTop > 100) {
+                    scrollToTopBtn.classList.add('show');
+                } else {
+                    scrollToTopBtn.classList.remove('show');
+                }
+            };
+
+            // When the user clicks on the button, scroll to the top of the document
+            scrollToTopBtn.addEventListener('click', () => {
+                window.scrollTo({top: 0, behavior: 'smooth'});
+            });
+        }
+    });
+  </script>
+
+  <!-- SCRIPT for Synchronized 5-Minute Page Refresh -->
+  <script>
+    (function() {
+      /**
+       * Schedules the page to reload at the next 5-minute mark on the clock.
+       * For example, if the page loads at 10:32:15, it will calculate the
+       * time remaining until 10:35:00 and set a timeout to reload then.
+       * This process repeats every time the page loads, ensuring a continuous
+       * synchronized refresh cycle.
+       */
+      function scheduleNextRefresh() {
+        const now = new Date();
+        const fiveMinutesInMs = 5 * 60 * 1000;
+        
+        // Calculate the number of milliseconds that have passed since the last 5-minute mark.
+        const msSinceLastInterval = now.getTime() % fiveMinutesInMs;
+        
+        // Calculate the delay until the next 5-minute mark.
+        let delayUntilNextInterval = fiveMinutesInMs - msSinceLastInterval;
+
+        // Add a small 1-second buffer to ensure the refresh happens just after the minute mark,
+        // preventing potential timing issues where the refresh occurs a fraction of a second too early.
+        delayUntilNextInterval += 1000;
+
+        setTimeout(function() {
+          window.location.reload();
+        }, delayUntilNextInterval);
+      }
+
+      // When the page has finished loading, schedule the first refresh.
+      window.addEventListener('load', scheduleNextRefresh);
+    })();
+  </script>
+
+
+
+
+
+
+
+
+
+
+</body></html>
