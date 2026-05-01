@@ -1,0 +1,1654 @@
+<!DOCTYPE html><html lang="zh-HK"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Weather Webcam">
+
+  <title>Macau Weather Webcam</title>
+  
+  <!-- PWA Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HK Weather Webcams">
+  
+  <!-- Dependencies for Status Bar -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.cdnfonts.com/css/zen-old-mincho" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Aboreto&amp;display=swap" rel="stylesheet">
+
+  <!-- ADDED: SunCalc library for sunrise/sunset calculation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+
+  <!-- DSAT Webcam Player -->
+  <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet">
+
+  <!-- BSR Banner -->
+  <link href="https://bushiroad-music.com/css/styles.css" rel="stylesheet" type="text/css">
+  <script src="https://bushiroad-music.com/js/lib/jquery.min.js"></script>
+  <script src="https://bushiroad-music.com/js/wideslider.js"></script>
+  
+  <!-- Basic CSS for Webcam Layout -->
+  <style>
+  /* Fonts */
+  @font-face {
+  font-family: 'Johnston100-Medium';
+  src: url("https://seep.eu.org/https://tfl.gov.uk/cdn/static/assets/fonts/Johnston100-Medium.woff2") format("woff2"), url("https://seep.eu.org/https://tfl.gov.uk/cdn/static/assets/fonts/Johnston100-Medium.woff") format("woff"); }
+  @font-face {
+  font-family: 'Johnston100-Regular';
+  src: url("https://seep.eu.org/https://tfl.gov.uk/cdn/static/assets/fonts/Johnston100-Regular.woff2") format("woff2"), url("https://seep.eu.org/https://tfl.gov.uk/cdn/static/assets/fonts/Johnston100-Regular.woff") format("woff"); }
+
+    /* General Styles - Reverted to original font */
+    body { 
+        font-family: 'Aboreto', 'Zen Old Mincho', serif;
+        margin: 0; 
+        background-color: #f4f4f4; 
+
+    }
+    /* Apply special font ONLY to the new header */
+    header {
+        position: sticky;
+        top: 0;
+        font-family: 'Johnston100-Regular','Alata', 'Noto Sans TC', sans-serif; 
+    }
+    h1 { text-align: center; }
+    h2 { font-size: 1.3em;   }
+
+    section { 
+      background-color: #ffffff;
+      border: 1px solid #dddddd;
+      border-radius: 4px;
+      padding: 15px;
+      margin: 0 auto 40px auto;
+      max-width: 1000px; 
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    img { max-width: 100%; height: auto; border-radius: 0px; margin-top: 10px; }
+    
+    /* Controls Styling */
+    .controls { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .controls button, .controls input { 
+        padding: 8px 12px; 
+        font-size: 14px;
+        border: 1px solid #cccccc;
+        border-radius: 4px;
+        background-color: #e9e9e9;
+        cursor: pointer;
+        font-family: "Zen Old Mincho", serif; /* Ensure consistent font */
+    }
+    .controls button:hover:not(:disabled), .controls input:hover {
+        background-color: #dcdcdc;
+    }
+    .controls button:disabled, .controls input:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+        opacity: 0.6;
+    }
+
+    /* Info and Status Messages */
+    .info-box {
+        background-color: #e6f7ff;
+        border: 1px solid #91d5ff;
+        border-radius: 4px;
+        padding: 15px;
+        margin: 0 auto 40px auto;
+        max-width: 900px;
+        text-align: center;
+    }
+    .loading-indicator {
+        display: none;
+        margin: 5px 0;
+        color: #007BFF;
+        font-weight: 500;
+    }
+    .loading-indicator.show {
+        display: block;
+    }
+    .error-message {
+        color: #dc3545;
+        margin: 5px 0;
+        padding: 8px;
+        background: #f8d7da;
+        border-radius: 4px;
+        display: none;
+    }
+    .error-message.show {
+        display: block;
+    }
+    
+    @media (max-width: 768px) {
+        .status-bar-weather > div:not(:last-child) {
+            display: none; /* Hide less critical info on smaller screens */
+        }
+        .status-bar-weather {
+            gap: 0.75rem; /* Adjust gap for smaller screens */
+        }
+    }
+     @media (max-width: 600px) {
+        .controls {
+            flex-direction: column;
+            align-items: stretch;
+        }
+    }
+
+    /* Status Bar Info Cycling */
+    #runwayInfo { 
+        transition: opacity 0.5s; 
+        display: flex; 
+        align-items: center; 
+        gap: 4px; 
+    }
+    .runway-icon { width: 16px; height: 14px; }
+    #status-wind, #status-temp, #status-humidity {
+    transition: opacity 0.5s ease;
+    }
+
+    /* IMPROVEMENT: Initially hide weather data for controlled fade-in */
+    #status-wind, #status-temp, #status-humidity, #status-weather-icon, #status-uv-icon, #special-messages {
+        opacity: 0;
+        /* Ensure transition is applied for the fade-in effect */
+        transition: opacity 0.5s ease-in-out;
+    }
+
+    /* New container for slider-style image viewers */
+    .image-viewer-container {
+        position: relative;
+    }
+
+     .wrapper {
+      min-height: 100%;
+
+    /* Basic styling for the slider container */
+    .slider-container {
+        position: relative;
+        max-width: 1000px;
+        max-height: 720px;
+        margin: auto;
+        overflow: hidden;
+    }
+
+    /* Styling for the individual slides */
+    .slide {
+        display: none;
+        width: 100%;
+    }
+
+    /* The smooth fade transition */
+    .slide img {
+        width: 100%;
+        vertical-align: middle; /* Fixes bottom space under image */
+        transition: opacity 0.5s ease;
+    }
+
+    /* MODIFIED: Corrected animation properties for fade effect */
+    .fade {
+        animation-name: fade;
+        animation-duration: 1.0s;
+    }
+
+    @keyframes fade {
+        from {opacity: 0}
+        to {opacity: 1}
+    }
+
+        /* Styling for the navigation buttons */
+    .prev, .next {
+        cursor: pointer;
+        position: absolute;
+        top: 50%;
+        width: auto;
+        padding: 16px;
+        margin-top: -22px;
+        color: white;
+        font-weight: bold;
+        font-size: 20px;
+        transition: 0.8s ease;
+        user-select: none;
+        background-color: transparent;
+    }
+
+    .next {
+        right: 0;
+    }
+
+        /* On hover, add a black background color with a little bit see-through */
+        .prev:hover, .next:hover {
+            background-color: rgba(0,0,0,0.8);
+        }
+
+        /* Styling for the dots/indicators container */
+        .dots-container {
+            position: absolute; /* Position dots over the image */
+            bottom: 5px;
+            width: 100%;
+            text-align: center;
+            /* Make the container bar transparent */
+            background-color: transparent;
+            padding: 0; /* Remove previous padding */
+        }
+
+        .dot {
+            cursor: pointer;
+            height: 8px;
+            width: 8px;
+            margin: 0 5px; /* Increased margin for better spacing */
+            background-color: rgba(255, 255, 255, 0.5); /* Semi-transparent white */
+            border-radius: 50%;
+            display: inline-block;
+            transition: background-color 0.6s ease;
+            border: 1px solid rgba(0, 0, 0, 0.2); /* Optional: adds a subtle border */
+        }
+
+        .active, .dot:hover {
+            background-color: #ffffff; /* Solid white for active/hover */
+        }
+
+/* Footer */
+    .footer {
+      font-family: 'Aboreto', 'Zen Old Mincho', serif;
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 50px;
+      margin-top: -50px;
+      background-color: black;
+    }
+
+/* Scroll to Top Button */
+    #scrollToTopBtn {
+        display: none; /* Hidden by default */
+        position: fixed;
+        bottom: 80px; /* Positioned to avoid the footer */
+        right: 10px;
+        z-index: 99;
+        border: none;
+        outline: none;
+        background-color: rgba(0, 150, 150, 0.1);
+        color: white;
+        cursor: pointer;
+        padding: 15px;
+        font-size: 18px;
+        transition: opacity 0.4s, visibility 0.4s;
+        opacity: 0;
+        visibility: hidden;
+    }
+
+    #scrollToTopBtn.show {
+        display: block;
+        visibility: visible;
+        opacity: 1;
+    }
+
+    #scrollToTopBtn:hover {
+        background-color: rgba(0, 150, 150, 0.3);
+    }
+    
+/* --- RESPONSIVE DESIGN ADJUSTMENTS --- */
+
+/* On medium screens (tablets), adjust status bar and banner */
+@media (max-width: 768px) {
+    .status-bar-weather > div:not(:last-child) { display: none; }
+    .status-bar-weather { gap: 0.75rem; }
+    .banner-slider {
+        height: 200px;
+    }
+}
+
+/* On small screens (mobile), stack controls vertically */
+@media (max-width: 600px) {
+    .controls { 
+        flex-direction: column; 
+        align-items: stretch; 
+    }
+}
+
+/* MODIFIED: On large tablets and below, maintain side-by-side layout but make it flexible */
+@media (max-width: 1024px) {
+    #body-container {
+        /* REMOVED flex-direction: column to keep side-by-side layout */
+        align-items: flex-start; /* Align columns to the top */
+        padding: 0 15px; /* Add horizontal padding */
+        gap: 15px; /* Reduce gap between columns */
+    }
+
+
+    .video-container {
+        margin-bottom: 20px;
+    }
+    /* OPTIMIZED: Removed fixed width and height to allow for responsive scaling.
+       The `fluid` option in the video player's setup will handle the rest. */
+    .video-js {
+        width: 100%; /* Ensure player takes full width of its container */
+    }
+    h2 {
+        color: #333;
+    }
+  </style>
+</head>
+
+
+<body>
+
+  <!-- Smartphone-like Status Bar -->
+    <header class="bg-white shadow-md sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Left side data -->
+                <div id="status-bar-left" class="flex items-center space-x-3 text-sm md:text-base">
+                    <span class="font-bold text-gray-900" id="status-time">--:--</span>
+                    <span id="status-wind" class="font-bold text-gray-900">-- km/h --</span>
+                    <!-- MODIFIED: Elements for alternating display, visibility removed -->
+                    <span id="status-temp" style="display: none;">--°C</span>
+                    <span id="status-humidity" style="display: none;">--%</span>
+                    <!-- ADDED: Weather icon element -->
+                    <img id="status-weather-icon" src="" alt="Weather" style="height: 20px; display: none;">
+                    <!-- ADDED: UV icon element -->
+                    <img id="status-uv-icon" src="" alt="UV Index" style="height: 20px; display: none; margin-left: 0px;">
+                    <!-- MODIFIED: Container for special warning signal icons -->
+                    <div id="special-messages" class="flex items-center margin-left: 0px"></div>
+                </div>
+                <!-- Right side data (Sunset) -->
+                <div class="flex items-center space-x-2 text-sm md:text-base">
+                   <div id="runwayInfo"></div>
+              </div>
+          </div>
+      </div>
+    </header>
+
+
+<div class="wrapper">
+<div class="p-block-a-l c-box js-wideslider"><ul class="p-block-a-l__container" loading="lazy">
+	<li class="p-block-a-l__item">
+		<a href="https://anime.bang-dream.com/mygo/" target="_blank">
+			<picture>
+				<source srcset="https://pbs.twimg.com/profile_banners/1512315733899837440/1763348405/1500x500" media="screen and (max-width:768px)" loading="lazy">
+				<img src="https://pbs.twimg.com/profile_banners/1512315733899837440/1763348405/1500x500" alt="MyGO!!!!!">
+			</picture>
+		</a>
+	</li>
+
+	<li class="p-block-a-l__item">
+		<a href="https://bushiroad-music.com/mygo_lp_michinoku_meisekiha/" target="_blank">
+			<picture>
+				<source srcset="https://bushiroad-music.com/wordpress/wp-content/uploads/2026/01/19104331/260109_BGD_MyGO_LP_banner_01_1515x510.jpg" media="screen and (max-width:768px)" loading="lazy">
+				<img src="https://bushiroad-music.com/wordpress/wp-content/uploads/2026/01/19104537/260109_BGD_MyGO_LP_banner_03_1515x510.jpg" alt="MyGO!!!!! アナログ盤「跡暖空」「迷跡波」">
+			</picture>
+		</a>
+	</li>
+
+
+	<li class="p-block-a-l__item">
+		<a href="https://bang-dream.com/avemujica_livetour_fukuoka/" target="_blank">
+			<picture>
+				<source srcset="https://bushiroad-music.com/wordpress/wp-content/uploads/2026/02/18103616/AM_Exitus_banner_1515_510_01.jpg" media="screen and (max-width:768px)" loading="lazy">
+				<img src="https://bushiroad-music.com/wordpress/wp-content/uploads/2026/02/18103616/AM_Exitus_banner_1515_510_01.jpg" alt="">
+			</picture>
+		</a>
+	</li>
+
+	<li class="p-block-a-l__item">
+		<a href="https://anime.bang-dream.com/avemujica/" target="_blank">
+			<picture>
+				<source srcset="https://en.bang-dream.com/wordpress/wp-content/themes/en_bang-dream_v0/assets/images/common/anime/img_ave-mujica.jpg" media="screen and (max-width:768px)" loading="lazy">
+				<img src="https://en.bang-dream.com/wordpress/wp-content/themes/en_bang-dream_v0/assets/images/common/anime/img_ave-mujica.jpg" alt="Ave Mujica">
+			</picture>
+		</a>
+	</li>
+
+	<li class="p-block-a-l__item">
+		<a href="https://girls-band-cry.com/" target="_blank">
+			<picture>
+				<source srcset="https://tc-animate.techorus-cdn.com/resize_image/resize_image.php?image=10151147_670dd7d40aa12.jpg" media="screen and (max-width:768px)" loading="lazy">
+				<img src="https://tc-animate.techorus-cdn.com/resize_image/resize_image.php?image=10151147_670dd7d40aa12.jpg" alt="ガールズバンドクライ">
+			</picture>
+		</a>
+	</li>
+
+</ul></div>
+
+  <h1 class="mt-4 mb-4 text-3xl font-bold text-center">澳門天氣照片</h1>
+
+<br>
+
+  <div class="info-box">
+    <strong>功能更新：</strong> 
+    <p>風速風向顯示順序 : 九澳 &gt; 大潭山(紅)</p>
+  </div>
+
+  
+  <!-- Macau Webcams -->
+  <section>
+      <h2 class="text-2xl mb-2 font-bold">氹仔雷達塔 (望向南面)</h2>
+      <p>圖像時間: <span id="timestampPip">Initializing...</span></p>
+      <div class="loading-indicator" id="loadingPip">Loading...</div>
+      <div class="error-message" id="errorPip"></div>
+      <div class="image-viewer-container">
+      <img id="webcamImagePip" src="" alt="Loading Pipcam Image">
+        <a id="prevPip" class="prev">❮</a>
+        <a id="nextPip" class="next">❯</a>
+      </div>
+      <div class="controls">
+          <button id="latestPip">最新圖像</button>
+          <input type="datetime-local" id="timePickerPip">
+      </div>
+  </section>
+
+  <section>
+      <h2 class="text-2xl mb-2 font-bold">氹仔雷達塔 (望向北面)</h2>
+      <p>圖像時間: <span id="timestampIp">Initializing...</span></p>
+      <div class="loading-indicator" id="loadingIp">Loading...</div>
+      <div class="error-message" id="errorIp"></div>
+      <div class="image-viewer-container">
+      <img id="webcamImageIp" src="" alt="Loading Ipcam Image" loading="lazy">
+        <a id="prevIp" class="prev">❮</a>
+        <a id="nextIp" class="next">❯</a>
+      </div>
+      <div class="controls">
+          <button id="latestIp">最新圖像</button>
+          <input type="datetime-local" id="timePickerIp">
+      </div>
+  </section>
+
+  <section class="lazy-target">
+      <h2 class="text-2xl mb-2 font-bold">氹仔雷達塔 (望向東北面)</h2>
+      <p>圖像時間: <span id="timestampOip">Initializing...</span></p>
+      <div class="loading-indicator" id="loadingOip">Loading...</div>
+      <div class="error-message" id="errorOip"></div>
+      <div class="image-viewer-container">
+      <img id="webcamImageOip" src="" alt="Loading Oipcam Image" loading="lazy">
+        <a id="prevOip" class="prev">❮</a>
+        <a id="nextOip" class="next">❯</a>
+      </div>
+      <div class="controls">
+          <button id="latestOip">最新圖像</button>
+          <input type="datetime-local" id="timePickerOip">
+      </div>
+  </section>
+
+  <section class="lazy-target">
+      <h2 class="text-2xl mb-2 font-bold">氹仔雷達塔 (望向西面)</h2>
+      <p>圖像時間: <span id="timestampQip">Initializing...</span></p>
+      <div class="loading-indicator" id="loadingQip">Loading...</div>
+      <div class="error-message" id="errorQip"></div>
+      <div class="image-viewer-container">
+      <img id="webcamImageQip" src="" alt="Loading Qipcam Image" loading="lazy">
+        <a id="prevQip" class="prev">❮</a>
+        <a id="nextQip" class="next">❯</a>
+      </div>
+      <div class="controls">
+          <button id="latestQip">最新圖像</button>
+          <input type="datetime-local" id="timePickerQip">
+      </div>
+  </section>
+
+  <section class="lazy-target">
+      <h2 class="text-2xl mb-2 font-bold">澳門外港</h2>
+      <p>圖像時間: <span id="timestampTip">Initializing...</span></p>
+      <div class="loading-indicator" id="loadingTip">Loading...</div>
+      <div class="error-message" id="errorTip"></div>
+      <div class="image-viewer-container">
+      <img id="webcamImageTip" src="" alt="Loading Tipcam Image" loading="lazy">
+        <a id="prevTip" class="prev">❮</a>
+        <a id="nextTip" class="next">❯</a>
+      </div>
+      <div class="controls">
+          <button id="latestTip">最新圖像</button>
+          <input type="datetime-local" id="timePickerTip">
+      </div>
+  </section>
+
+  <section class="lazy-target">
+      <h2 class="text-2xl mb-2 font-bold">路環颱風委員會</h2>
+      <p>圖像時間: <span id="timestampSip">Initializing...</span></p>
+      <div class="loading-indicator" id="loadingSip">Loading...</div>
+      <div class="error-message" id="errorSip"></div>
+      <div class="image-viewer-container">
+      <img id="webcamImageSip" src="" alt="Loading Sipcam Image" loading="lazy">
+        <a id="prevSip" class="prev">❮</a>
+        <a id="nextSip" class="next">❯</a>
+      </div>
+      <div class="controls">
+          <button id="latestSip">最新圖像</button>
+          <input type="datetime-local" id="timePickerSip">
+      </div>
+  </section>
+
+  <section>
+      <h2 class="text-2xl mb-2 font-bold">友誼大橋氹仔端(氹仔方向)</h2>
+        <!-- OPTIMIZED: Enabled fluid mode for responsiveness and removed the static source tag. -->
+        <video id="video1" class="video-js vjs-default-skin" controls="" preload="auto" data-setup="{&quot;fluid&quot;: true}">
+            Your browser does not support the video tag.
+        </video>
+  </section>
+
+  <section>
+      <h2 class="text-2xl mb-2 font-bold">北安大馬路(澳門方向)</h2>
+        <!-- OPTIMIZED: Enabled fluid mode for responsiveness and removed the static source tag. -->
+        <video id="video2" class="video-js vjs-default-skin" controls="" preload="auto" data-setup="{&quot;fluid&quot;: true}">
+            Your browser does not support the video tag.
+        </video>
+  </section>
+
+  <section>
+      <h2 class="text-2xl mb-2 font-bold">澳門大橋澳門端(氹仔方向)</h2>
+        <!-- OPTIMIZED & FIXED: Corrected ID to "video3", enabled fluid mode, and removed the static source tag. -->
+        <video id="video3" class="video-js vjs-default-skin" controls="" preload="auto" data-setup="{&quot;fluid&quot;: true}">
+            Your browser does not support the video tag.
+        </video>
+  </section>
+
+
+  <section>
+      <h2 class="text-2xl mb-2 font-bold">澳門大橋氹仔端出入口</h2>
+        <!-- OPTIMIZED & FIXED: Corrected ID to "video5", enabled fluid mode, and removed the static source tag. -->
+        <video id="video5" class="video-js vjs-default-skin" controls="" preload="auto" data-setup="{&quot;fluid&quot;: true}">
+            Your browser does not support the video tag.
+        </video>
+  </section>
+
+  <section>
+      <h2 class="text-2xl mb-2 font-bold">西灣大橋氹仔方向</h2>
+        <!-- OPTIMIZED & FIXED: Corrected ID to "video4", enabled fluid mode, and removed the static source tag. -->
+        <video id="video4" class="video-js vjs-default-skin" controls="" preload="auto" data-setup="{&quot;fluid&quot;: true}">
+            Your browser does not support the video tag.
+        </video>
+  </section>
+
+  <div class="slider-container">
+        <div class="slide fade">
+            <a href="https://anime.bang-dream.com/mygo/" target="_blank">
+            <img src="https://i0.wp.com/news.qoo-app.com/wp-content/uploads/2022/04/mygocover.jpg" alt="Image 1">
+            </a>
+        </div>
+
+        <div class="slide fade">
+            <a href="https://bang-dream.com/discographies/4165/" target="_blank">
+            <img src="https://pbs.twimg.com/media/HGA8S5FbMAAFTcS?format=jpg&name=large" alt="Image 2 MyGO!!!!! 3rd Album「致並跡」">
+            </a>
+        </div>
+
+        <div class="slide fade">
+            <a href="https://www.youtube.com/watch?v=nWlLg8jRnUY" target="_blank">
+            <img src="https://p2.bahamut.com.tw/B/2KU/71/52e6c1aba563b59f8563d78ce21x5pr5.WEBP" alt="Image 3 Ave Mujica Movie">
+            </a>
+        </div>
+
+        <div class="slide fade">
+            <a href="https://bang-dream.com/discographies/4092" target="_blank">
+            <img src="https://pbs.twimg.com/media/GyeCZv6asAAbdDt?format=jpg&name=large" alt="Image 4 Onrai" class="lazy-target">
+            </a>
+        </div>
+
+        <div class="slide fade">
+            <a href="https://www.youtube.com/watch?v=o9sOQduCCgw" target="_blank">
+            <img src="https://news-cdn.para-daily.com/wp-content/uploads/2025/03/mygo_mujica_main_11zon.webp" alt="Image 5">
+            </a>
+        </div>
+
+        <div class="slide fade">
+            <a href="https://x.com/bang_dream_mygo/status/2047510849259278434" target="_blank">
+            <img src="https://pbs.twimg.com/media/HGmJwg5bYAECMD5?format=jpg&name=large" alt="MyGO!!!!!の活動4周年を記念">
+            </a>
+        </div>
+
+        <div class="slide fade">
+            <a href="https://x.com/bang_dream_mygo/status/2048235617645990096" target="_blank">
+            <img src="https://pbs.twimg.com/media/HGmKFZGbUAAXdRd?format=jpg&name=large" alt="MyGO!!!!!の活動4周年を記念">
+            </a>
+        </div>
+
+        <div class="slide fade">
+            <a href="https://x.com/bang_dream_mygo/status/2047873233555497441" target="_blank">
+            <img src="https://pbs.twimg.com/media/HGmKTGVbIAAoa-q?format=jpg&name=large" alt="MyGO!!!!!の活動4周年を記念">
+            </a>
+        </div>
+
+        <div class="slide fade">
+            <a href="https://x.com/bang_dream_mygo/status/2048598011006116310" target="_blank">
+            <img src="https://pbs.twimg.com/media/HGmLOGxaIAATY-D?format=jpg&name=large" alt="MyGO!!!!!の活動4周年を記念">
+            </a>
+        </div>
+
+        <div class="slide fade">
+            <a href="https://x.com/bang_dream_mygo/status/2048960397731111148" target="_blank">
+            <img src="https://pbs.twimg.com/media/HGmLwuIbkAAO7vE?format=jpg&name=large" alt="MyGO!!!!!の活動4周年を記念">
+            </a>
+        </div>
+
+        <div class="slide fade">
+            <a href="https://x.com/bang_dream_mygo/status/2049322789119603101" target="_blank">
+            <img src="https://pbs.twimg.com/media/HGmMhK2bcAAg4DR?format=jpg&name=large" alt="MyGO!!!!!の活動4周年を記念">
+            </a>
+        </div>
+
+        <a class="prev">❮</a>
+        <a class="next">❯</a>
+
+        <div class="dots-container">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+        </div>
+  </div>
+  
+<br> <br>
+<br> <br>
+
+  <!-- NEW: Scroll to Top Button HTML -->
+  <button id="scrollToTopBtn" title="Go to top">▲</button>
+
+</div> 
+
+
+
+<footer class="bg-white shadow-md sticky top-0 z-10" id="footer">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+        <p>Frank Clyde 2026 ©</p> 
+        <div id="status-bar-left" class="flex items-center space-x-5 col-md-6 text-sm md:text-base">
+        <a href="https://www.instagram.com/frankgrph" target="_blank"><img src="https://cdn-icons-png.freepik.com/512/5949/5949057.png" style="width:20px;height:20px;"></a>
+        <a href="https://www.flickr.com/photos/n85205" target="_blank"><img src="https://cdn-icons-png.freepik.com/512/1236/1236843.png" style="width:20px;height:20px;"></a>
+        </div>
+</div></div></footer>
+
+
+
+
+  <!-- Script for Macau Webcams -->
+<script>
+      // Self-executing function to scope Macau variables
+      (function() {
+          class WebcamViewer {
+              constructor() {
+                  // --- Configuration ---
+                  const prefixes = ['pip', 'ip', 'oip', 'qip', 'tip', 'sip'];
+                  
+                  // --- State ---
+                  this.prefixes = prefixes;
+                  this.currentTimestamps = {};
+                  this.loadingStates = {};
+                  this.loadedPrefixes = new Set();
+                  
+                  // ADDED: Cache to share discovered timestamps across all webcams for the same time slot
+                  this.discoveredTimestamps = new Map(); 
+
+                  prefixes.forEach(p => {
+                      this.currentTimestamps[p] = 1750813566; // Initial base timestamp
+                      this.loadingStates[p] = false;
+                  });
+
+                  this.increment = 900; // 15 minutes in seconds
+                  this.baseTimestamp = 1750813566;
+                  this.baseTime = new Date('2025-06-25T09:00:00+08:00').getTime() / 1000;
+                  this.timestampCache = new Map();
+                  this.maxCacheSize = 200;
+                  
+                  // --- Initialization ---
+                  this.initEventListeners();
+                  this.initialize();
+              }
+
+              initEventListeners() {
+                  this.prefixes.forEach(prefix => {
+                      const suffix = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                      document.getElementById(`prev${suffix}`).onclick = () => this.showPreviousImage(prefix);
+                      document.getElementById(`next${suffix}`).onclick = () => this.showNextImage(prefix);
+                      document.getElementById(`latest${suffix}`).onclick = () => this.showLatestImage(prefix);
+                      document.getElementById(`timePicker${suffix}`).onchange = () => this.showSelectedTimeImage(prefix);
+                  });
+              }
+
+              getImageUrl(prefix, timestamp) {
+                  const camInfo = {
+                      pip: { folderPrefix: 'pipcam', filename: 'pipcam24.JPG' },
+                      oip: { folderPrefix: 'oipcam', filename: 'oipcam24.JPG' },
+                      ip:  { folderPrefix: 'ipcam',  filename: 'ipcam24.JPG' },
+                      qip: { folderPrefix: 'qipcam', filename: 'qipcam24.JPG' },
+                      tip: { folderPrefix: 'tipcam', filename: 'tipcam24.JPG' },
+                      sip: { folderPrefix: 'sipcam', filename: 'sipcam24.JPG' }
+                  };
+                  const info = camInfo[prefix];
+                  if (!info) {
+                      console.error(`Unknown prefix for getImageUrl: ${prefix}`);
+                      return '';
+                  }
+                  return `https://cms.smg.gov.mo/uploads/album/${info.folderPrefix}_${timestamp}/${info.filename}`;
+              }
+
+              formatForDateTimeInput(date) {
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                  const day = String(date.getDate()).padStart(2, '0');
+                  const hours = String(date.getHours()).padStart(2, '0');
+                  const minutes = String(date.getMinutes()).padStart(2, '0');
+                  return `${year}-${month}-${day}T${hours}:${minutes}`;
+              }
+
+              updateImage(prefix, timestamp) {
+                  const suffix = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                  const img = document.getElementById(`webcamImage${suffix}`);
+                  const timestampSpan = document.getElementById(`timestamp${suffix}`);
+                  const timePicker = document.getElementById(`timePicker${suffix}`);
+
+                  img.src = this.getImageUrl(prefix, timestamp);
+                  
+                  const originalDate = new Date(timestamp * 1000);
+                  
+                  const formattedOriginalTime = originalDate.toLocaleString('zh-HK', { 
+                      timeZone: 'Asia/Macau', year: 'numeric', month: '2-digit', day: '2-digit', 
+                      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false 
+                  });
+                  timestampSpan.textContent = `${formattedOriginalTime} (MCT)`;
+                  
+                  const roundedDate = new Date(originalDate);
+                  const minutes = roundedDate.getMinutes();
+                  roundedDate.setMinutes(Math.floor(minutes / 15) * 15, 0, 0);
+                  
+                  if (timePicker) {
+                      timePicker.value = this.formatForDateTimeInput(roundedDate);
+                  }
+
+                  this.currentTimestamps[prefix] = timestamp;
+                  this.hideError(prefix);
+              }
+
+              getCurrentTimestamp() {
+                  const now = Math.floor(Date.now() / 1000);
+                  const elapsedSinceBase = now - this.baseTime;
+                  const periods = Math.floor(elapsedSinceBase / 900);
+                  return this.baseTimestamp + (periods * this.increment);
+              }
+
+              // --- HIGHLY OPTIMIZED SECTION ---
+              getTimestampVariations(targetTimestamp) {
+                  // Calculate the exact theoretical 15-minute interval base robustly
+                  const elapsedSinceBase = targetTimestamp - this.baseTime;
+                  const periods = Math.round(elapsedSinceBase / this.increment);
+                  const expectedBase = this.baseTimestamp + (periods * this.increment);
+              
+                  const variations = []; 
+              
+                  // PRIORITY 1: Did another webcam already discover the exact timestamp for this 15min slot?
+                  if (this.discoveredTimestamps.has(expectedBase)) {
+                      variations.push(this.discoveredTimestamps.get(expectedBase));
+                  }
+                  
+                  // PRIORITY 2: The exact theoretical base
+                  if (!variations.includes(expectedBase)) {
+                      variations.push(expectedBase);
+                  }
+              
+                  // PRIORITY 3: Generate expanding variations. 
+                  // Cron jobs usually delay (run slightly after :00), so we prioritize + offsets over - offsets.
+                  for (let i = 1; i <= 40; i++) {
+                      if (!variations.includes(expectedBase + i)) variations.push(expectedBase + i);
+                      if (!variations.includes(expectedBase - i)) variations.push(expectedBase - i);
+                  }
+              
+                  return { expectedBase, variations };
+              }
+              // --- END OF OPTIMIZED SECTION ---
+
+              async tryLoadImage(prefix, timestamp) {
+                  if (this.timestampCache.has(`${prefix}_${timestamp}`)) {
+                      this.updateImage(prefix, timestamp);
+                      return timestamp;
+                  }
+                  return new Promise((resolve, reject) => {
+                      const img = new Image();
+                      img.src = this.getImageUrl(prefix, timestamp);
+                      const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
+                      img.onload = () => {
+                          clearTimeout(timeout);
+                          if (this.timestampCache.size >= this.maxCacheSize) {
+                              this.timestampCache.delete(this.timestampCache.keys().next().value);
+                          }
+                          this.timestampCache.set(`${prefix}_${timestamp}`, true);
+                          this.updateImage(prefix, timestamp);
+                          resolve(timestamp);
+                      };
+                      img.onerror = () => { clearTimeout(timeout); reject(new Error('Load failed')); };
+                  });
+              }
+
+              async tryTimestampsParallel(prefix, timestamps) {
+                  // 1. Try the very first candidate (usually the globally cached one) ALONE to avoid spamming 404s
+                  try {
+                      return await this.tryLoadImage(prefix, timestamps[0]);
+                  } catch (e) {
+                      // First candidate failed, proceed to batch searching
+                  }
+
+                  // 2. Search the remaining variations in slightly larger batches for speed
+                  for (let i = 1; i < timestamps.length; i += 5) {
+                      const batch = timestamps.slice(i, i + 5);
+                      try { 
+                          return await Promise.any(batch.map(ts => this.tryLoadImage(prefix, ts))); 
+                      } catch {}
+                  }
+                  throw new Error('All timestamps failed');
+              }
+
+              setLoadingState(prefix, loading) {
+                  this.loadingStates[prefix] = loading;
+                  const suffix = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                  document.getElementById(`loading${suffix}`).classList.toggle('show', loading);
+                  document.getElementById(`webcamImage${suffix}`).style.opacity = loading ? '0.7' : '1';
+                  [ `prev${suffix}`, `next${suffix}`, `latest${suffix}`, `timePicker${suffix}`]
+                    .forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.disabled = loading;
+                    });
+              }
+
+              setDateTimeInputConstraints() {
+                  const now = new Date();
+                  const past = new Date(now.getTime() - 118 * 60 * 60 * 1000); // 118 hours ago
+                  const formatForInput = (date) => {
+                      const year = date.getFullYear();
+                      const month = String(date.getMonth() + 1).padStart(2, '0');
+                      const day = String(date.getDate()).padStart(2, '0');
+                      const hours = String(date.getHours()).padStart(2, '0');
+                      const minutes = String(date.getMinutes()).padStart(2, '0');
+                      return `${year}-${month}-${day}T${hours}:${minutes}`;
+                  };
+                  const maxString = formatForInput(now);
+                  const minString = formatForInput(past);
+                  
+                  this.prefixes.forEach(prefix => {
+                      const suffix = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                      const picker = document.getElementById(`timePicker${suffix}`);
+                      if (picker) {
+                          picker.min = minString;
+                          picker.max = maxString;
+                      }
+                  });
+              }
+
+              showError(prefix, message) {
+                  const suffix = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                  const errorEl = document.getElementById(`error${suffix}`);
+                  errorEl.textContent = message;
+                  errorEl.classList.add('show');
+              }
+
+              hideError(prefix) {
+                  const suffix = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                  document.getElementById(`error${suffix}`).classList.remove('show');
+              }
+
+              async findAndLoadImage(prefix, startTimestamp, direction = -1) {
+                  if (this.loadingStates[prefix]) return;
+                  this.setLoadingState(prefix, true);
+                  try {
+                      let ts = startTimestamp;
+                      for (let i = 0; i < 20; i++) { // Limit search depth
+                          try {
+                              const { expectedBase, variations } = this.getTimestampVariations(ts);
+                              const successfulTs = await this.tryTimestampsParallel(prefix, variations);
+                              
+                              // ADDED: Cache this successful timestamp to the global map so other webcams load instantly
+                              this.discoveredTimestamps.set(expectedBase, successfulTs);
+                              
+                              return;
+                          } catch {
+                              ts += (this.increment * direction);
+                          }
+                      }
+                      throw new Error('Image not found');
+                  } catch (error) {
+                      this.showError(prefix, '找不到圖像。');
+                  } finally {
+                      this.setLoadingState(prefix, false);
+                  }
+              }
+
+              showPreviousImage(prefix) { this.findAndLoadImage(prefix, this.currentTimestamps[prefix] - this.increment, -1); }
+              showNextImage(prefix) { this.findAndLoadImage(prefix, this.currentTimestamps[prefix] + this.increment, 1); }
+              showLatestImage(prefix) { this.findAndLoadImage(prefix, this.getCurrentTimestamp(), -1); }
+
+              async showSelectedTimeImage(prefix) {
+                  const suffix = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                  const timePicker = document.getElementById(`timePicker${suffix}`);
+                  if (!timePicker.value) { this.showError(prefix, '請選擇日期和時間'); return; }
+                  
+                  const selectedTime = new Date(timePicker.value);
+                  const selectedTimestamp = Math.floor(selectedTime.getTime() / 1000);
+
+                  const minDate = new Date(timePicker.min);
+                  const maxDate = new Date(timePicker.max);
+
+                  if (selectedTime < minDate || selectedTime > maxDate) {
+                      this.showError(prefix, `所選時間超出範圍。請選擇 ${this.formatForDateTimeInput(minDate)} 到 ${this.formatForDateTimeInput(maxDate)} 之間的時間。`);
+                      await this.showLatestImage(prefix);
+                      return;
+                  }
+                  
+                  const elapsedSinceBase = selectedTimestamp - this.baseTime;
+                  const periods = Math.round(elapsedSinceBase / 900);
+                  let targetTimestamp = this.baseTimestamp + (periods * this.increment);
+                  
+                  if (targetTimestamp > this.getCurrentTimestamp()) {
+                      this.showError(prefix, '所選時間是未來時間，顯示最新可用圖像');
+                      await this.showLatestImage(prefix);
+                  } else {
+                      await this.findAndLoadImage(prefix, targetTimestamp, -1);
+                  }
+              }
+              
+              setupIntersectionObserver() {
+                  const options = {
+                      root: null, 
+                      rootMargin: '200px', 
+                      threshold: 0.01 
+                  };
+
+                  const observerCallback = (entries, observer) => {
+                      entries.forEach(entry => {
+                          if (entry.isIntersecting) {
+                              const img = entry.target;
+                              const prefix = img.id.replace('webcamImage', '').toLowerCase();
+                              
+                              if (!this.loadedPrefixes.has(prefix)) {
+                                  this.showLatestImage(prefix);
+                                  this.loadedPrefixes.add(prefix);
+                              }
+                              observer.unobserve(img);
+                          }
+                      });
+                  };
+
+                  const observer = new IntersectionObserver(observerCallback, options);
+
+                  this.prefixes.forEach(prefix => {
+                      const suffix = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+                      const imgElement = document.getElementById(`webcamImage${suffix}`);
+                      if (imgElement) {
+                          observer.observe(imgElement);
+                      }
+                  });
+              }
+
+              initialize() {
+                  this.setDateTimeInputConstraints();
+                  this.setupIntersectionObserver();
+                  
+                  setInterval(() => {
+                      if (this.loadedPrefixes.size > 0) {
+                          const updatePromises = Array.from(this.loadedPrefixes).map(p => this.showLatestImage(p));
+                          Promise.all(updatePromises);
+                      }
+                  }, 15 * 60 * 1000);
+              }
+          }
+          new WebcamViewer();
+      })();
+  </script>
+
+
+  
+  <!-- IMPROVED SCRIPT for Status Bar using SMG Data -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // --- Constants and Global State ---
+      const PROXY_URL = 'https://seep.eu.org/';
+      const SMG_WEATHER_URL = 'https://xml.smg.gov.mo/c_actualweather.xml';
+      const SMG_BRIEF_URL = 'https://xml.smg.gov.mo/c_actual_brief.xml';
+      const SMG_UV_URL = 'https://xml.smg.gov.mo/c_actualUVI.xml';
+      const WARNING_URLS = [
+          'https://xml.smg.gov.mo/c_typhoon.xml',
+          'https://xml.smg.gov.mo/c_monsoon.xml',
+          'https://xml.smg.gov.mo/c_rainstorm.xml',
+          'https://xml.smg.gov.mo/c_thunderstorm.xml',
+          'https://xml.smg.gov.mo/c_stormsurge.xml',
+          'https://xml.smg.gov.mo/c_tsunami.xml'
+      ];
+      const ALL_WEATHER_URLS = [SMG_WEATHER_URL, SMG_BRIEF_URL, SMG_UV_URL, ...WARNING_URLS];
+
+      let atisDataForCycle = [];
+      let rightStatusCycleIndex = 0;
+      let windDisplayData = { kv: null, tg: null };
+      let qnhData = null; // MODIFIED: Added variable for QNH
+      let sunEventData = { text: '--:--', type: 'sunset' };
+      let currentTimezone = 'HKT';
+
+      // --- Core Helper: Robust Fetching ---
+      async function fetchXmlWithRetry(url, maxRetries = 3, retryDelay = 3000) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const cacheBustedUrl = `${url}?_=${new Date().getTime()}`;
+                const response = await fetch(PROXY_URL + encodeURIComponent(cacheBustedUrl));
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                
+                const xmlText = await response.text();
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlText, "application/xml");
+
+                if (xmlDoc.getElementsByTagName("parsererror").length > 0) {
+                    throw new Error('Failed to parse XML response.');
+                }
+                
+                return xmlDoc; // Success
+            } catch (err) {
+                console.error(`Attempt ${attempt} for ${url} failed: ${err.message}`);
+                if (attempt < maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                } else {
+                    console.error(`All fetch attempts failed for ${url}.`);
+                    return null; // Final failure
+                }
+            }
+        }
+      }
+
+      // --- Data Parsing and DOM Update Functions ---
+      function parseSmgWeatherData(xmlDoc) {
+          if (!xmlDoc) {
+              document.getElementById('status-temp').textContent = '--°C';
+              document.getElementById('status-humidity').textContent = '--%';
+              windDisplayData.kv = null;
+              windDisplayData.tg = null;
+              qnhData = null; // MODIFIED: Reset QNH on failure
+              return;
+          }
+
+          const getStationData = (stationCode) => {
+              const stationNode = xmlDoc.querySelector(`station[code="${stationCode}"]`);
+              if (!stationNode) return null;
+              const getData = (tagName, valueNode = 'Value') => stationNode.querySelector(`${tagName} ${valueNode}`)?.textContent || null;
+              return {
+                  temp: getData('Temperature'),
+                  humidity: getData('Humidity'),
+                  windSpeed: getData('WindSpeed'),
+                  windDirection: getData('WindDirection'),
+                  qnh: getData('MeanSeaLevelPressure') // MODIFIED: Parse QNH
+              };
+          };
+
+          const kaHoData = getStationData('KV');
+          const taipaGrandeData = getStationData('TG');
+
+          windDisplayData.kv = (kaHoData && kaHoData.windSpeed && kaHoData.windDirection) 
+              ? `${kaHoData.windSpeed}km/h ${kaHoData.windDirection}` 
+              : null;
+
+          windDisplayData.tg = (taipaGrandeData && taipaGrandeData.windSpeed && taipaGrandeData.windDirection) 
+              ? `${taipaGrandeData.windSpeed}km/h ${taipaGrandeData.windDirection}` 
+              : null;
+          
+          // MODIFIED: Extract and format QNH data
+          if (kaHoData && kaHoData.qnh) {
+              qnhData = `QNH ${parseFloat(kaHoData.qnh).toFixed(1)}`;
+          } else {
+              qnhData = null;
+          }
+
+          if (kaHoData) {
+              document.getElementById('status-temp').textContent = `${kaHoData.temp || '--'}°C`;
+              document.getElementById('status-humidity').textContent = `${kaHoData.humidity || '--'}%`;
+          } else {
+              document.getElementById('status-temp').textContent = '--°C';
+              document.getElementById('status-humidity').textContent = '--%';
+          }
+      }
+
+      function parseWeatherIcon(xmlDoc) {
+          const iconEl = document.getElementById('status-weather-icon');
+          if (xmlDoc) {
+              const iconUrlNode = xmlDoc.querySelector('IconURL');
+              if (iconUrlNode && iconUrlNode.textContent) {
+                  iconEl.src = iconUrlNode.textContent.trim();
+                  iconEl.style.display = 'inline';
+                  return;
+              }
+          }
+          iconEl.style.display = 'none';
+      }
+
+      function parseUvIcon(xmlDoc) {
+          const iconEl = document.getElementById('status-uv-icon');
+          if (xmlDoc) {
+              const iconUrlNode = xmlDoc.querySelector('ActualUVBReport IconURL');
+              if (iconUrlNode && iconUrlNode.textContent) {
+                  iconEl.src = iconUrlNode.textContent.trim();
+                  iconEl.style.display = 'inline';
+                  return;
+              }
+          }
+          iconEl.style.display = 'none';
+      }
+
+      function parseWarningSignals(xmlDocs) {
+          const warningContainer = document.getElementById('special-messages');
+          if (!warningContainer) return;
+
+          warningContainer.innerHTML = '';
+          warningContainer.style.gap = '4px';
+
+          for (const xmlDoc of xmlDocs) {
+              if (xmlDoc) {
+                  const actionNode = xmlDoc.querySelector('Action');
+                  const iconUrlNode = xmlDoc.querySelector('IconURL');
+
+                  if (actionNode && actionNode.textContent.trim().toUpperCase() !== 'NIL' && iconUrlNode && iconUrlNode.textContent.trim()) {
+                      const iconUrl = iconUrlNode.textContent.trim();
+                      const iconEl = document.createElement('img');
+                      iconEl.src = iconUrl;
+                      iconEl.alt = 'Weather Warning Signal';
+                      iconEl.style.height = '20px';
+                      iconEl.style.marginLeft = '4px';
+                      iconEl.style.display = 'inline';
+                      warningContainer.appendChild(iconEl);
+                  }
+              }
+          }
+      }
+
+      // --- Main Data Orchestration ---
+      async function fetchAllAndProcessWeatherData() {
+          // This function fetches all data concurrently to reduce total load time.
+          const results = await Promise.allSettled(ALL_WEATHER_URLS.map(url => fetchXmlWithRetry(url)));
+          
+          const [weatherResult, briefResult, uvResult, ...warningResults] = results;
+
+          if (weatherResult.status === 'fulfilled') {
+              parseSmgWeatherData(weatherResult.value);
+          }
+          if (briefResult.status === 'fulfilled') {
+              parseWeatherIcon(briefResult.value);
+          }
+          if (uvResult.status === 'fulfilled') {
+              parseUvIcon(uvResult.value);
+          }
+          
+          const fulfilledWarningDocs = warningResults
+              .filter(res => res.status === 'fulfilled' && res.value)
+              .map(res => res.value);
+          parseWarningSignals(fulfilledWarningDocs);
+
+          // After processing, make all elements visible with a fade-in effect.
+          const elementsToFadeIn = ['#status-wind', '#status-temp', '#status-humidity', '#status-weather-icon', '#status-uv-icon', '#special-messages'];
+          elementsToFadeIn.forEach(selector => {
+              const el = document.querySelector(selector);
+              if (el) el.style.opacity = 1;
+          });
+      }
+
+      // --- Clock and Sun Times ---
+      function updateClock() {
+        const timeEl = document.getElementById('status-time');
+        if (!timeEl) return;
+        const now = new Date();
+        const options = {
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+            timeZone: currentTimezone === 'UTC' ? 'UTC' : 'Asia/Hong_Kong'
+        };
+        timeEl.textContent = now.toLocaleTimeString('en-GB', options);
+        timeEl.title = `Timezone: ${currentTimezone}. Click to switch.`;
+      }
+      
+      function updateSunriseSunset() {
+          const latitude = 22.1987;
+          const longitude = 113.5439;
+          const now = new Date();
+          const solarTimesToday = SunCalc.getTimes(now, latitude, longitude);
+          const sunsetToday = solarTimesToday.sunset;
+
+          const formatTime = (date) => {
+              if (!date || isNaN(date.getTime())) return '--:--';
+              return date.toLocaleTimeString('zh-HK', {
+                  hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Macau'
+              });
+          };
+
+          if (now.getTime() < sunsetToday.getTime()) {
+              sunEventData.text = formatTime(sunsetToday);
+              sunEventData.type = 'sunset';
+          } else {
+              const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+              const solarTimesTomorrow = SunCalc.getTimes(tomorrow, latitude, longitude);
+              const sunriseTomorrow = solarTimesTomorrow.sunrise;
+              sunEventData.text = formatTime(sunriseTomorrow);
+              sunEventData.type = 'sunrise';
+          }
+      }
+
+      // --- ATIS Functions (Unchanged) ---
+      async function updateAndParseAtis() {
+          const atisUrl = 'https://r.jina.ai/https://atis.cad.gov.hk/ATIS/ATISweb/atis.php';
+          const RETRY_DELAY = 10000;
+
+          function expandRunwayString(runwayStr) {
+              if (!runwayStr) return '';
+              const parts = runwayStr.split('/');
+              if (parts.length <= 1) return runwayStr;
+              const firstPart = parts[0].trim();
+              const runwayNumberMatch = firstPart.match(/^\d+/);
+              if (!runwayNumberMatch) return runwayStr.replace(/\//g, ', ');
+              const runwayNumber = runwayNumberMatch[0];
+              const expandedParts = [firstPart];
+              for (let i = 1; i < parts.length; i++) {
+                  const part = parts[i].trim();
+                  if (/^[A-Z]+$/.test(part)) {
+                      expandedParts.push(runwayNumber + part);
+                  } else {
+                      expandedParts.push(part);
+                  }
+              }
+              return expandedParts.join(', ');
+          }
+          
+          while (true) {
+              try {
+                  const cacheBustedAtisUrl = `${atisUrl}?_=${new Date().getTime()}`;
+                  const response = await fetch(cacheBustedAtisUrl);
+                  if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
+                  
+                  const markdown = await response.text();
+                  let arrivalRunway = null;
+                  let departureRunway = null;
+                  const arrivalRegex = /ARRIVALS, RWY\s+([^\n\r.]+)/i;
+                  const departureRegex = /DEPARTURES, RWY\s+([^\n\r.]+)/i;
+                  const arrivalMatch = markdown.match(arrivalRegex);
+                  if (arrivalMatch && arrivalMatch[1]) {
+                      arrivalRunway = expandRunwayString(arrivalMatch[1].trim());
+                  }
+                  const departureMatch = markdown.match(departureRegex);
+                  if (departureMatch && departureMatch[1]) {
+                      departureRunway = expandRunwayString(departureMatch[1].trim());
+                  }
+                  
+                  const newAtisData = [];
+                  if (arrivalRunway) newAtisData.push({ type: 'ARR', interpreted: arrivalRunway });
+                  if (departureRunway) newAtisData.push({ type: 'DEP', interpreted: departureRunway });
+                  
+                  atisDataForCycle = newAtisData;
+                  console.log('Successfully fetched and parsed ATIS data.');
+                  break; 
+              } catch (error) {
+                  console.error(`Error fetching or parsing ATIS: ${error.message}. Retrying in ${RETRY_DELAY / 1000} seconds...`);
+                  atisDataForCycle = [];
+                  await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+              }
+          }
+      }
+      
+      async function startAtisUpdates() {
+        await updateAndParseAtis();
+        setInterval(updateAndParseAtis, 60000);
+      }
+
+      // --- UI Cycling Functions ---
+      function startWindCycle() {
+          const windEl = document.getElementById('status-wind');
+          if (!windEl) return;
+
+          const cycleConfig = [
+              { key: 'kv', color: 'rgb(17, 24, 39)', duration: 5000, fallback: '--km/h --' }, // 九澳
+              { key: 'tg', color: '#800000',         duration: 5000, fallback: '--km/h --' }  // 大潭山
+          ];
+          let currentIndex = 0;
+
+          (function cycle() {
+              const currentStep = cycleConfig[currentIndex];
+              windEl.style.opacity = 0;
+
+              setTimeout(() => {
+                  windEl.textContent = windDisplayData[currentStep.key] || currentStep.fallback;
+                  windEl.style.color = currentStep.color;
+                  windEl.style.opacity = 1;
+              }, 500);
+
+              currentIndex = (currentIndex + 1) % cycleConfig.length;
+              setTimeout(cycle, currentStep.duration);
+          }());
+      }
+
+      function cycleLeftStatusBar() {
+          const elements = [document.getElementById('status-temp'), document.getElementById('status-humidity')];
+          if (elements.some(el => !el)) return; 
+
+          let currentIndex = 0;
+          elements.forEach((el, index) => {
+              el.style.display = index === 0 ? 'inline' : 'none';
+          });
+
+          (function doCycle() {
+              setTimeout(() => {
+                  const currentEl = elements[currentIndex];
+                  if (!currentEl) return;
+                  currentEl.style.opacity = '0';
+
+                  setTimeout(() => {
+                      currentEl.style.display = 'none';
+                      currentIndex = (currentIndex + 1) % elements.length;
+                      const nextEl = elements[currentIndex];
+                      if (nextEl) {
+                          nextEl.style.opacity = '0';
+                          nextEl.style.display = 'inline';
+                          requestAnimationFrame(() => { nextEl.style.opacity = '1'; });
+                      }
+                      doCycle();
+                  }, 500); 
+              }, 5000);
+          }());
+      }
+
+      function cycleRightStatusBar() {
+          const runwayInfoEl = document.getElementById('runwayInfo');
+          if (!runwayInfoEl) return;
+          
+          setInterval(() => {
+              const arrInfo = atisDataForCycle.find(r => r.type === 'ARR');
+              const depInfo = atisDataForCycle.find(r => r.type === 'DEP');
+              const displayItems = [];
+
+              // MODIFIED: Display items in the requested order
+              // 1. Sunset/Sunrise
+              if (sunEventData.text !== '--:--') {
+                  const arrowPath = sunEventData.type === 'sunset' ? 'm16 6-4 4-4-4' : 'm16 10-4-4-4 4';
+                  const sunIconHtml = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-500" style="display:inline-block;"><path d="M12 10V2"></path><path d="m4.93 10.93 1.41 1.41"></path><path d="M2 18h2"></path><path d="M20 18h2"></path><path d="m19.07 10.93-1.41 1.41"></path><path d="M22 22H2"></path><path d="${arrowPath}"></path><path d="M16 18a4 4 0 0 0-8 0"></path></svg>`;
+                  displayItems.push(sunIconHtml + `<span>${sunEventData.text}</span>`);
+              }
+
+              // 2. Arrival Runway
+              if (arrInfo) {
+                  const icon = 'https://fra-flugplan.de/fra-flugplan/img/arrival-yellow-16x14.png';
+                  displayItems.push(`<img src="${icon}" alt="ARR" class="runway-icon"> <span>RWY ${arrInfo.interpreted}</span>`);
+              }
+
+              // 3. Departure Runway
+              if (depInfo) {
+                  const icon = 'https://fra-flugplan.de/fra-flugplan/img/departure-yellow-16x14.png';
+                  displayItems.push(`<img src="${icon}" alt="DEP" class="runway-icon"> <span>RWY ${depInfo.interpreted}</span>`);
+              }
+              
+              // 4. QNH
+              if (qnhData) {
+                  const qnhIconHtml = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-500" style="display:inline-block; vertical-align: middle;"><path d="M12 22a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path><path d="M12 14a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z"></path><path d="M12 12v-2"></path><path d="m15 13-1-1"></path></svg>`;
+                  displayItems.push(qnhIconHtml + `<span>${qnhData}</span>`);
+              }
+              
+              if (displayItems.length > 0) {
+                  runwayInfoEl.style.opacity = 0;
+                  setTimeout(() => {
+                      runwayInfoEl.innerHTML = displayItems[rightStatusCycleIndex % displayItems.length];
+                      runwayInfoEl.style.opacity = 1;
+                      rightStatusCycleIndex++;
+                  }, 500);
+              } else {
+                  runwayInfoEl.innerHTML = '';
+              }
+          }, 5000);
+      }
+
+      // --- Initialization and Scheduling ---
+      async function initialize() {
+          // Setup clock and timezone switcher
+          const timeEl = document.getElementById('status-time');
+          if (timeEl) {
+              timeEl.style.cursor = 'pointer';
+              timeEl.addEventListener('click', () => {
+                  currentTimezone = (currentTimezone === 'HKT') ? 'UTC' : 'HKT';
+                  updateClock();
+              });
+          }
+          updateClock(); 
+          setInterval(updateClock, 1000); 
+
+          // Perform initial, fast data load
+          updateSunriseSunset();
+          await fetchAllAndProcessWeatherData();
+          
+          // Start all UI cycles
+          startWindCycle();
+          cycleLeftStatusBar();
+          cycleRightStatusBar();
+          startAtisUpdates();
+
+          // Schedule periodic updates
+          setInterval(() => {
+              updateSunriseSunset();
+              fetchAllAndProcessWeatherData();
+          }, 60 * 1000);
+      }
+
+      initialize();
+    });
+  </script>
+
+
+
+<!-- OPTIMIZED SCRIPT for DSAT Webcams -->
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Configuration for all DSAT webcams
+            const dsatCams = [
+                { id: 'video1', url: 'https://streaming1.dsatmacau.com/traffic/b1033.m3u8' },
+                { id: 'video2', url: 'https://streaming1.dsatmacau.com/traffic/t1056.m3u8' },
+                { id: 'video3', url: 'https://streaming1.dsatmacau.com/traffic/b1411.m3u8' },
+                { id: 'video4', url: 'https://streaming1.dsatmacau.com/traffic/b1311.m3u8' },
+                { id: 'video5', url: 'https://streaming1.dsatmacau.com/traffic/b1466.m3u8' }
+            ];
+
+            /**
+             * Appends the current timestamp to a URL to prevent caching.
+             */
+            function getCacheBustedUrl(baseUrl) {
+                return `${baseUrl}?t=${Date.now()}`;
+            }
+
+            // Object to keep track of initialized players
+            const players = {};
+
+            // Intersection Observer configuration
+            const observerOptions = {
+                root: null,
+                rootMargin: '200px', // Pre-loads the video slightly before it enters the screen
+                threshold: 0.01
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    const videoId = entry.target.id;
+                    const cam = dsatCams.find(c => c.id === videoId);
+                    
+                    if (!cam) return;
+
+                    // Initialize the Video.js player once per element if it hasn't been yet
+                    if (!players[videoId]) {
+                        players[videoId] = videojs(videoId, {
+                            fluid: true,
+                            preload: 'none' // Prevents eager loading of data
+                        });
+                    }
+
+                    const player = players[videoId];
+
+                    if (entry.isIntersecting) {
+                        // Video has entered the viewport: assign source to start loading
+                        if (!player.currentSrc()) {
+                            player.src({
+                                src: getCacheBustedUrl(cam.url),
+                                type: 'application/x-mpegURL'
+                            });
+                        }
+                    } else {
+                        // Video has left the viewport: pause and reset
+                        if (player.currentSrc()) {
+                            player.pause();
+                            // Resetting the player entirely strips the source and stops 
+                            // Video.js from continuously fetching the .m3u8 file in the background
+                            player.reset(); 
+                        }
+                    }
+                });
+            }, observerOptions);
+
+            // Attach the observer to each video element
+            dsatCams.forEach(cam => {
+                const videoElement = document.getElementById(cam.id);
+                if (videoElement) {
+                    observer.observe(videoElement);
+                } else {
+                    console.error(`Error: Video element with id '${cam.id}' was not found.`);
+                }
+            });
+        });
+    </script>
+
+  <!-- NEW SCRIPT for Slider -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        /**
+         * Initializes a self-contained, auto-playing slider for a given container.
+         * @param {HTMLElement} container The slider's container element.
+         */
+        function initializeSlider(container) {
+            const slides = container.querySelectorAll('.slide');
+            const dots = container.querySelectorAll('.dot');
+            const prevBtn = container.querySelector('.prev');
+            const nextBtn = container.querySelector('.next');
+            
+            // Don't initialize if there are no slides
+            if (slides.length === 0) {
+                return;
+            }
+
+            let slideIndex = 1;
+            let slideTimer;
+
+            /**
+             * The main function to display a specific slide and handle UI updates.
+             * @param {number} n The index of the slide to show.
+             */
+            function showSlides(n) {
+                // This logic handles looping back to the start or end of the slides
+                if (n > slides.length) { slideIndex = 1; }
+                if (n < 1) { slideIndex = slides.length; }
+
+                // Hide all slide elements
+                slides.forEach(slide => slide.style.display = "none");
+                
+                // Remove the "active" class from all dots if they exist
+                if (dots.length > 0) {
+                    dots.forEach(dot => dot.className = dot.className.replace(" active", ""));
+                }
+
+                // Display the correct slide and set the corresponding dot to "active"
+                slides[slideIndex - 1].style.display = "block";
+                if (dots.length > 0) {
+                    dots[slideIndex - 1].className += " active";
+                }
+
+                // Set a new timer to automatically advance the slide
+                clearTimeout(slideTimer);
+                slideTimer = setTimeout(() => showSlides(slideIndex += 1), 6000);
+            }
+
+            // Attach event listeners to navigation controls if they exist
+            if (nextBtn) {
+                nextBtn.addEventListener('click', () => showSlides(slideIndex += 1));
+            }
+
+            if (prevBtn) {
+                prevBtn.addEventListener('click', () => showSlides(slideIndex -= 1));
+            }
+            
+            if (dots.length > 0) {
+                dots.forEach((dot, index) => {
+                    dot.addEventListener('click', () => showSlides(slideIndex = index + 1));
+                });
+            }
+
+            // Start the slideshow
+            showSlides(slideIndex);
+        }
+
+        // --- INITIALIZATION ---
+        // Find all potential slider containers and initialize them.
+        // This query selects any element with class 'banner-slider' or 'slider-container'
+        // that contains at least one child with the class 'slide'.
+        document.querySelectorAll('.banner-slider, .slider-container').forEach(sliderContainer => {
+            if (sliderContainer.querySelector('.slide')) {
+                initializeSlider(sliderContainer);
+            }
+        });
+    });
+    </script>
+
+  <!-- SCRIPT for Scroll to Top Button -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const scrollToTopBtn = document.getElementById('scrollToTopBtn');
+
+        if (scrollToTopBtn) {
+            // Show or hide the button based on scroll position
+            window.onscroll = function() {
+                // A scroll position of > 100px is a good trigger point
+                if (document.body.scrollTop > 100 || document.documentElement.scrollTop > 100) {
+                    scrollToTopBtn.classList.add('show');
+                } else {
+                    scrollToTopBtn.classList.remove('show');
+                }
+            };
+
+            // When the user clicks on the button, scroll to the top of the document
+            scrollToTopBtn.addEventListener('click', () => {
+                window.scrollTo({top: 0, behavior: 'smooth'});
+            });
+        }
+    });
+  </script>
+
+  <!-- SCRIPT for Synchronized 5-Minute Page Refresh -->
+  <script>
+    (function() {
+      /**
+       * Schedules the page to reload at the next 5-minute mark on the clock.
+       * For example, if the page loads at 10:32:15, it will calculate the
+       * time remaining until 10:35:00 and set a timeout to reload then.
+       * This process repeats every time the page loads, ensuring a continuous
+       * synchronized refresh cycle.
+       */
+      function scheduleNextRefresh() {
+        const now = new Date();
+        const fiveMinutesInMs = 5 * 60 * 1000;
+        
+        // Calculate the number of milliseconds that have passed since the last 5-minute mark.
+        const msSinceLastInterval = now.getTime() % fiveMinutesInMs;
+        
+        // Calculate the delay until the next 5-minute mark.
+        let delayUntilNextInterval = fiveMinutesInMs - msSinceLastInterval;
+
+        // Add a small 1-second buffer to ensure the refresh happens just after the minute mark,
+        // preventing potential timing issues where the refresh occurs a fraction of a second too early.
+        delayUntilNextInterval += 1000;
+
+        setTimeout(function() {
+          window.location.reload();
+        }, delayUntilNextInterval);
+      }
+
+      // When the page has finished loading, schedule the first refresh.
+      window.addEventListener('load', scheduleNextRefresh);
+    })();
+  </script>
+
+
+
+
+
+
+
+</body></html>
