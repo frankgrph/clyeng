@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HK Transport Trip Planner Ultimate v4</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body{
+    background:#020617;
+}
+
+.highlight-stop{
+    background:rgba(245,158,11,0.15);
+    border-left:4px solid #f59e0b;
+}
+
+.stop-selected{
+    border-left:5px solid #22c55e;
+    background:rgba(34,197,94,0.12);
+}
+
+.route-suggestion{
+    transition:0.2s;
+}
+
+.route-suggestion:hover{
+    background:#1e293b;
+}
+
+::-webkit-scrollbar{
+    width:8px;
+}
+
+::-webkit-scrollbar-thumb{
+    background:#334155;
+    border-radius:20px;
+}
+</style>
+</head>
+<body class="text-white min-h-screen">
+
+<div id="loading-overlay" class="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
+    <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-amber-500"></div>
+    <div class="mt-5 text-amber-400 font-bold text-lg">
+        正在初始化香港交通資料庫...
+    </div>
+</div>
+
+<div class="container mx-auto max-w-7xl p-4">
+
+<header class="bg-slate-900 border border-slate-700 rounded-2xl p-5 mb-5 shadow-2xl">
+
+<div class="flex flex-col xl:flex-row justify-between gap-5">
+
+<div>
+<h1 class="text-3xl font-black text-amber-400">
+🚇 HK Transport Trip Planner Ultimate v4
+</h1>
+
+<div class="text-slate-400 mt-2 text-sm">
+KMB / CTB / NLB / MTR 真實 ETA + 車費 + 多重轉乘
+</div>
+</div>
+
+<div class="flex flex-wrap gap-3 items-center">
+
+<input
+type="text"
+id="highlight-keyword"
+placeholder="轉乘站關鍵字"
+class="bg-slate-800 border border-slate-700 px-3 py-2 rounded-lg text-sm">
+
+<button
+onclick="applyKeywordHighlight()"
+class="bg-amber-500 hover:bg-amber-400 text-black font-bold px-4 py-2 rounded-lg">
+高亮轉乘
+</button>
+
+<button
+onclick="refreshAllEtas()"
+class="bg-emerald-600 hover:bg-emerald-500 font-bold px-4 py-2 rounded-lg">
+🔄 更新 ETA
+</button>
+
+<button
+onclick="addLeg()"
+class="bg-blue-600 hover:bg-blue-500 font-bold px-4 py-2 rounded-lg">
+➕ 新增線程
+</button>
+
+<select
+id="selection-mode"
+class="bg-slate-800 border border-slate-700 px-3 py-2 rounded-lg text-sm font-bold">
+<option value="1">模式1：同站三按</option>
+<option value="2" selected>模式2：上下車</option>
+</select>
+
+</div>
+
+</div>
+
+</header>
+
+<div id="legs-wrapper" class="grid grid-cols-1 xl:grid-cols-2 gap-5"></div>
+
+</div>
+
+<script>
+
+let kmbRoutes=[];
+let ctbRoutes=[];
+let nlbRoutes=[];
+
+let stopNameCache={};
+let activeLegs={};
+let collapsedStops={};
+let stopSelectionState={};
+let legCounter=0;
+
+window.addEventListener('DOMContentLoaded',async()=>{
+
+try{
+
+const [kmbRes,ctbRes,nlbRes]=await Promise.all([
+
+// 初始化各交通公司 API
+fetch('https://data.etabus.gov.hk/v1/transport/kmb/route/'),
+fetch('https://rt.data.gov.hk/v2/transport/citybus/route/ctb'),
+fetch('https://rt.data.gov.hk/v1/transport/nlb/route.php?action=list')
+]);
+
+const kmbJson=await kmbRes.json();
+const ctbJson=await ctbRes.json();
+const nlbJson=await nlbRes.json();
+
+kmbRoutes=kmbJson.data||[];
+ctbRoutes=ctbJson.data||[];
+nlbRoutes=nlbJson.routes||[];
+
+addLeg();
+addLeg();
+
+document.getElementById('loading-overlay').classList.add('hidden');
+
+}catch(err){
+console.error(err);
+alert('初始化失敗');
+}
+
+});
+
+function addLeg(){
+
+legCounter++;
+
+const wrapper=document.getElementById('legs-wrapper');
+
+const section=document.createElement('section');
+
+section.className='bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl';
+
+section.innerHTML=`
+
+<div class="bg-gradient-to-r from-amber-500 to-orange-500 p-4 flex justify-between items-center">
+
+<div class="font-black text-black text-lg">
+第 ${legCounter} 程
+</div>
+
+<div id="leg${legCounter}-status"
+class="bg-black text-amber-400 text-xs px-3 py-1 rounded-full">
+未載入
+</div>
+
+</div>
+
+<div class="p-4 border-b border-slate-700 space-y-3">
+
+<div class="relative">
+
+<div class="flex gap-2">
+
+<input
+id="leg${legCounter}-route"
+type="text"
+placeholder="輸入巴士/MTR路線"
+oninput="showSuggestions(${legCounter})"
+class="flex-1 bg-slate-800 border border-slate-700 px-3 py-2 rounded-lg uppercase font-bold">
+
+<button
+onclick="searchRoute(${legCounter})"
+class="bg-white text-black font-bold px-5 py-2 rounded-lg hover:bg-slate-200">
+搜尋
+</button>
+
+</div>
+
+<div
+id="leg${legCounter}-suggestions"
+class="absolute z-20 mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg overflow-hidden hidden shadow-2xl">
+</div>
+
+</div>
+
+<select
+id="leg${legCounter}-variant"
+onchange="selectVariant(${legCounter})"
+class="hidden w-full bg-slate-800 border border-slate-700 px-3 py-2 rounded-lg">
+</select>
+
+</div>
+
+<div
+id="leg${legCounter}-stops-container"
+class="max-h-[700px] overflow-y-auto divide-y divide-slate-800">
+
+<div class="p-8 text-center text-slate-500 text-sm">
+請搜尋交通路線
+</div>
+
+</div>
+
+`;
+
+wrapper.appendChild(section);
+}
+
+function showSuggestions(leg){
+
+const input=document
+.getElementById(`leg${leg}-route`)
+.value
+.trim()
+.toUpperCase();
+
+const container=document.getElementById(`leg${leg}-suggestions`);
+
+if(!input){
+container.classList.add('hidden');
+return;
+}
+
+let results=[];
+
+results.push(...kmbRoutes
+.filter(r=>r.route.startsWith(input))
+.map(r=>({
+route:r.route,
+company:'KMB'
+})));
+
+results.push(...ctbRoutes
+.filter(r=>r.route.startsWith(input))
+.map(r=>({
+route:r.route,
+company:'CTB'
+})));
+
+results.push(...nlbRoutes
+.filter(r=>r.routeNo.startsWith(input))
+.map(r=>({
+route:r.routeNo,
+company:'NLB'
+})));
+
+const unique=[];
+const map=new Set();
+
+results.forEach(r=>{
+
+const key=`${r.company}-${r.route}`;
+
+if(!map.has(key)){
+map.add(key);
+unique.push(r);
+}
+
+});
+
+container.innerHTML='';
+
+unique.slice(0,12).forEach(r=>{
+
+const item=document.createElement('div');
+
+item.className='route-suggestion px-3 py-2 cursor-pointer border-b border-slate-800 text-sm';
+
+item.innerHTML=`
+<span class="text-amber-400 font-bold">[${r.company}]</span>
+${r.route}
+`;
+
+item.onclick=()=>{
+
+const inputBox=document.getElementById(`leg${leg}-route`);
+
+inputBox.value=r.route;
+
+container.classList.add('hidden');
+
+searchRoute(leg);
+
+};
+
+container.appendChild(item);
+
+});
+
+if(unique.length>0){
+container.classList.remove('hidden');
+}else{
+container.classList.add('hidden');
+}
+
+}
+
+async function searchRoute(leg){
+
+const routeInput=document
+.getElementById(`leg${leg}-route`)
+.value
+.trim()
+.toUpperCase();
+
+const select=document.getElementById(`leg${leg}-variant`);
+
+select.innerHTML='<option value="">請選擇方向</option>';
+
+const matchedKmb=kmbRoutes.filter(r=>r.route===routeInput);
+const matchedCtb=ctbRoutes.filter(r=>r.route===routeInput);
+const matchedNlb=nlbRoutes.filter(r=>r.routeNo===routeInput);
+
+matchedKmb.forEach(r=>{
+
+const opt=document.createElement('option');
+
+opt.value=JSON.stringify({
+company:'KMB',
+route:r.route,
+bound:r.bound,
+serviceType:r.service_type,
+orig:r.orig_tc,
+dest:r.dest_tc
+});
+
+opt.textContent=`[KMB] ${r.orig_tc} → ${r.dest_tc}`;
+
+select.appendChild(opt);
+
+});
+
+matchedCtb.forEach(r=>{
+
+const out=document.createElement('option');
+
+out.value=JSON.stringify({
+company:'CTB',
+route:r.route,
+direction:'outbound',
+orig:r.orig_tc,
+dest:r.dest_tc
+});
+
+out.textContent=`[CTB] ${r.orig_tc} → ${r.dest_tc}`;
+
+select.appendChild(out);
+
+const inbound=document.createElement('option');
+
+inbound.value=JSON.stringify({
+company:'CTB',
+route:r.route,
+direction:'inbound',
+orig:r.dest_tc,
+dest:r.orig_tc
+});
+
+inbound.textContent=`[CTB] ${r.dest_tc} → ${r.orig_tc}`;
+
+select.appendChild(inbound);
+
+});
+
+matchedNlb.forEach(r=>{
+
+const opt=document.createElement('option');
+
+opt.value=JSON.stringify({
+company:'NLB',
+route:r.routeNo,
+routeId:r.routeId,
+orig:r.departureName_c,
+dest:r.destinationName_c
+});
+
+opt.textContent=`[NLB] ${r.departureName_c} → ${r.destinationName_c}`;
+
+select.appendChild(opt);
+
+});
+
+if(select.options.length<=1){
+alert('找不到路線');
+return;
+}
+
+select.classList.remove('hidden');
+
+document.getElementById(`leg${leg}-status`).textContent='已找到';
+}
+
+async function selectVariant(leg){
+
+const config=JSON.parse(
+document.getElementById(`leg${leg}-variant`).value
+);
+
+const container=document.getElementById(`leg${leg}-stops-container`);
+
+container.innerHTML='<div class="p-8 text-center text-amber-400 animate-pulse">正在載入資料...</div>';
+
+let stops=[];
+
+try{
+
+if(config.company==='KMB'){
+
+const dirParam=config.bound==='O'
+?'outbound'
+:'inbound';
+
+const [stopRes,fareRes]=await Promise.all([
+fetch(`https://data.etabus.gov.hk/v1/transport/kmb/route-stop/${config.route}/${dirParam}/${config.serviceType}`),
+fetch(`https://data.etabus.gov.hk/v1/transport/kmb/route-fare/${config.route}/${dirParam}/${config.serviceType}`)
+]);
+
+const stopJson=await stopRes.json();
+const fareJson=await fareRes.json();
+
+const fareMap={};
+
+(fareJson.data||[]).forEach(f=>{
+fareMap[String(f.seq)]=f.octopus_fare||f.full_fare||f.fare||'-';
+});
+
+stops=await Promise.all(
+(stopJson.data||[]).map(async s=>{
+
+const stopId=s.stop;
+
+if(!stopNameCache[stopId]){
+
+const res=await fetch(`https://data.etabus.gov.hk/v1/transport/kmb/stop/${stopId}`);
+const json=await res.json();
+
+stopNameCache[stopId]=json.data.name_tc;
+
+}
+
+return {
+seq:s.seq,
+stopId,
+name:stopNameCache[stopId],
+fare:fareMap[String(s.seq)]||'-',
+etas:[]
+};
+
+})
+);
+
+}
+
+activeLegs[leg]={
+...config,
+stops:stops||[]
+};
+
+await fetchLegEtas(leg);
+
+renderStops(leg);
+
+}catch(err){
+console.error(err);
+container.innerHTML='<div class="p-8 text-center text-red-400">載入失敗</div>';
+}
+
+}
+
+async function fetchLegEtas(leg){
+
+const target=activeLegs[leg];
+
+if(!target) return;
+
+try{
+
+if(target.company==='KMB'){
+
+const res=await fetch(
+`https://data.etabus.gov.hk/v1/transport/kmb/route-eta/${target.route}/${target.serviceType}`
+);
+
+const json=await res.json();
+
+const allEtas=json.data||[];
+
+target.stops.forEach(stop=>{
+
+stop.etas=allEtas.filter(e=>{
+
+return (
+parseInt(e.seq)===parseInt(stop.seq)&&
+e.dir===target.bound&&
+e.eta
+);
+
+}).slice(0,3);
+
+});
+
+}
+
+}catch(err){
+console.error(err);
+}
+
+renderStops(leg);
+}
+
+function calculateCountdown(eta){
+
+if(!eta) return null;
+
+const diff=new Date(eta)-new Date();
+
+return Math.ceil(diff/1000/60);
+}
+
+function formatTime(eta){
+
+if(!eta) return '--:--';
+
+const d=new Date(eta);
+
+const h=String(d.getHours()).padStart(2,'0');
+const m=String(d.getMinutes()).padStart(2,'0');
+
+return `${h}:${m}`;
+}
+
+function toggleCollapse(leg,seq){
+
+const currentMode=parseInt(
+document.getElementById('selection-mode').value
+);
+
+if(!stopSelectionState[leg]){
+
+stopSelectionState[leg]={
+mode:currentMode,
+first:null,
+second:null,
+collapsed:false
+};
+
+}
+
+const state=stopSelectionState[leg];
+
+state.mode=currentMode;
+
+
+// =====================================
+// 模式 1：同站三按模式
+// =====================================
+
+if(state.mode===1){
+
+if(state.first===null){
+
+state.first=seq;
+state.collapsed=false;
+
+renderStops(leg);
+return;
+
+}
+
+if(
+String(state.first)===String(seq)
+&& state.collapsed===false
+){
+
+state.collapsed=true;
+
+renderStops(leg);
+return;
+
+}
+
+if(
+String(state.first)===String(seq)
+&& state.collapsed===true
+){
+
+state.first=null;
+state.second=null;
+state.collapsed=false;
+
+renderStops(leg);
+return;
+
+}
+
+state.first=seq;
+state.second=null;
+state.collapsed=false;
+
+renderStops(leg);
+return;
+
+}
+
+
+// =====================================
+// 模式 2：上下車模式
+// =====================================
+
+if(state.mode===2){
+
+if(state.first===null){
+
+state.first=seq;
+state.second=null;
+state.collapsed=false;
+
+renderStops(leg);
+return;
+
+}
+
+if(state.second===null){
+
+state.second=seq;
+state.collapsed=true;
+
+renderStops(leg);
+return;
+
+}
+
+state.first=null;
+state.second=null;
+state.collapsed=false;
+
+renderStops(leg);
+
+}
+
+}
+
+function renderStops(leg){
+
+const target=activeLegs[leg];
+
+if(!target) return;
+
+const keyword=document
+.getElementById('highlight-keyword')
+.value
+.trim();
+
+const container=document.getElementById(`leg${leg}-stops-container`);
+
+container.innerHTML='';
+
+const state=stopSelectionState[leg]||{
+first:null,
+second:null,
+collapsed:false,
+mode:2
+};
+
+const firstSeq=state.first;
+const secondSeq=state.second;
+const collapsed=state.collapsed;
+
+(target.stops||[]).forEach(stop=>{
+
+let show=true;
+
+
+// =========================
+// 模式 1
+// =========================
+
+if(state.mode===1){
+
+if(collapsed && firstSeq){
+
+show=String(stop.seq)===String(firstSeq);
+
+}
+
+}
+
+
+// =========================
+// 模式 2
+// =========================
+
+if(state.mode===2){
+
+if(collapsed && firstSeq && secondSeq){
+
+show=
+String(stop.seq)===String(firstSeq)
+||
+String(stop.seq)===String(secondSeq);
+
+}
+
+}
+
+if(!show) return;
+
+const isSelected=
+String(stop.seq)===String(firstSeq)
+||
+String(stop.seq)===String(secondSeq);
+
+const row=document.createElement('div');
+
+const highlight=keyword && stop.name.includes(keyword);
+
+let extraClass='';
+
+if(String(stop.seq)===String(firstSeq)){
+extraClass='border-l-4 border-green-500 bg-green-500/10';
+}
+
+if(String(stop.seq)===String(secondSeq)){
+extraClass='border-l-4 border-red-500 bg-red-500/10';
+}
+
+row.className=`
+p-4 flex flex-col xl:flex-row justify-between gap-4
+cursor-pointer hover:bg-slate-800 transition
+${highlight ? 'highlight-stop':''}
+${extraClass}
+`;
+
+row.onclick=()=>toggleCollapse(leg,stop.seq);
+
+let etaHtml='';
+
+if(stop.etas.length>0){
+
+stop.etas.forEach((eta,idx)=>{
+
+const etaTime=eta.eta||eta.time;
+
+const mins=calculateCountdown(etaTime);
+
+if(mins<-2) return;
+
+let label='';
+let style='';
+
+if(mins<=1){
+label='即將抵站';
+style='bg-red-500 text-white';
+}else{
+label=`${mins} 分鐘`;
+style=idx===0
+?'bg-amber-500 text-black'
+:'bg-slate-700 text-white';
+}
+
+etaHtml+=`
+<div class="flex flex-col items-center px-3 py-2 rounded-xl ${style}">
+<div class="text-xs font-black">
+${label}
+</div>
+<div class="text-[10px] mt-1 opacity-90">
+${formatTime(etaTime)}
+</div>
+</div>
+`;
+
+});
+
+}
+
+if(!etaHtml){
+etaHtml='<div class="text-slate-500 text-xs">暫無班次</div>';
+}
+
+row.innerHTML=`
+
+<div class="flex gap-3 items-start">
+
+<div class="bg-black border border-slate-700 px-2 py-1 rounded-lg text-xs font-bold text-slate-300">
+${stop.seq}
+</div>
+
+<div>
+
+<div class="font-bold ${highlight ? 'text-amber-300':'text-white'}">
+${stop.name}
+</div>
+
+<div class="text-emerald-400 text-xs font-bold mt-1">
+車費：$${stop.fare}
+</div>
+
+</div>
+
+</div>
+
+<div class="flex flex-wrap gap-2 items-center">
+${etaHtml}
+</div>
+
+`;
+
+container.appendChild(row);
+
+});
+
+}
+
+function applyKeywordHighlight(){
+
+Object.keys(activeLegs).forEach(leg=>{
+renderStops(leg);
+});
+
+}
+
+async function refreshAllEtas(){
+
+await Promise.all(
+Object.keys(activeLegs).map(async leg=>{
+await fetchLegEtas(leg);
+})
+);
+
+}
+
+setInterval(async()=>{
+
+try{
+await refreshAllEtas();
+}catch(e){
+console.error(e);
+}
+
+},15000);
+
+</script>
+
+</body>
+</html>
